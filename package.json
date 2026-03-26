@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "start": "dotenv -e .env.development -- expo start",
-    "start:dev": "dotenv -e .env.development -- expo start",
-    "start:prod": "dotenv -e .env.prod -- expo start",
+    "start": "NODE_ENV=development expo start",
+    "start:dev": "NODE_ENV=development expo start",
+    "start:prod": "NODE_ENV=production expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web"
