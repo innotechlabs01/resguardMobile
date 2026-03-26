@@ -1,21 +1,47 @@
 {
   "name": "resguardmobile",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "start": "dotenv -e .env.development -- expo start",
+    "start:dev": "dotenv -e .env.development -- expo start",
+    "start:prod": "dotenv -e .env.prod -- expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "dependencies": {
+    "@clerk/clerk-expo": "^2.19.31",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/bottom-tabs": "^7.15.7",
+    "@react-navigation/native": "^7.2.0",
+    "@supabase/supabase-js": "^2.100.0",
     "expo": "~55.0.8",
+    "expo-auth-session": "^55.0.9",
+    "expo-av": "^16.0.8",
+    "expo-constants": "~55.0.9",
+    "expo-crypto": "~55.0.10",
+    "expo-linking": "~55.0.8",
+    "expo-modules-core": "~55.0.17",
+    "expo-notifications": "~55.0.13",
+    "expo-router": "~55.0.7",
+    "expo-secure-store": "~55.0.9",
     "expo-status-bar": "~55.0.4",
-    "react": "19.2.0",
-    "react-native": "0.83.2"
+    "expo-web-browser": "~55.0.10",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-native": "0.83.2",
+    "react-native-paper": "^5.15.0",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0",
+    "react-native-vector-icons": "^10.3.0",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "@types/react-native-vector-icons": "^6.4.18",
+    "dotenv": "^17.3.1",
+    "dotenv-cli": "^11.0.0",
     "typescript": "~5.9.2"
   },
   "private": true
