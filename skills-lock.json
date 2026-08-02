@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "react-native": {
+      "source": "vercel-labs/json-render",
+      "sourceType": "github",
+      "computedHash": "1cfeffbd71f8fc350e7fdb5cd1f76067d64b60f2fef2300fd83181ad90148451"
+    },
+    "react-native-best-practices": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "computedHash": "5e6ae387e9c06433315d133d9e0955c4b5efedc9f3e7137f4e824be3b121b828"
+    },
+    "react-native-design": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "f75e8c7bd9ffd77a29b74eece63806ff87f8723c30744c5cb90f8baab388d18e"
+    }
+  }
+}
