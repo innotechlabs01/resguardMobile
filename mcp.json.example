@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "turso": {
+      "command": "npx",
+      "args": ["-y", "mcp-turso"],
+      "env": {
+        "TURSO_DATABASE_URL": "libsql://your-db.turso.io",
+        "TURSO_AUTH_TOKEN": "your-token-here"
+      }
+    }
+  }
+}

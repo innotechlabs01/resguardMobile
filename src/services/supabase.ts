@@ -1,7 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://rjznxyevpqhvftcgmdum.supabase.co';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqem54eWV2cHFodmZ0Y2dtZHVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMTA0NjgsImV4cCI6MjA4OTc4NjQ2OH0.dCK9k5CVtjaccJmthcETp35tm_xP4q_YTL9j9hjkB4k';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY environment variables'
+  );
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -12,11 +18,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 export const getUser = async (userId: string) => {
   const { data, error } = await supabase
-    .from('profiles')
+    .from('users')
     .select('*')
     .eq('clerk_user_id', userId)
     .single();
-  
+
   if (error) throw error;
   return data;
 };
@@ -27,7 +33,7 @@ export const getUserPayments = async (userId: string) => {
     .select('*')
     .eq('user_id', userId)
     .order('date', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 };
@@ -38,7 +44,7 @@ export const getReservations = async (userId: string) => {
     .select('*')
     .eq('user_id', userId)
     .order('date', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 };
@@ -49,7 +55,7 @@ export const getParkingRequests = async (userId: string) => {
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 };
@@ -60,7 +66,7 @@ export const getCommunications = async (buildingId: string) => {
     .select('*')
     .eq('building_id', buildingId)
     .order('sent_at', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 };
@@ -71,7 +77,7 @@ export const getIntercomCalls = async (userId: string) => {
     .select('*')
     .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`)
     .order('started_at', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 };
@@ -82,7 +88,7 @@ export const getAssemblies = async (buildingId: string) => {
     .select('*, agenda_items(*)')
     .eq('building_id', buildingId)
     .order('start_date', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 };
@@ -103,7 +109,7 @@ export const submitVote = async (
     })
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 };
@@ -122,7 +128,7 @@ export const saveIntercomCall = async (call: {
     .insert(call)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 };

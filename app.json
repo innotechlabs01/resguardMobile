@@ -18,11 +18,11 @@
       "bundleIdentifier": "com.resguard.mobile"
     },
     "android": {
-"adaptiveIcon": {
-       "backgroundColor": "#000000",
-       "foregroundImage": "./assets/icon.png",
-       "monochromeImage": "./assets/icon.png"
-     },
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/icon.png",
+        "monochromeImage": "./assets/icon.png"
+      },
       "package": "com.resguard.mobile",
       "permissions": [
         "android.permission.CAMERA",
@@ -46,9 +46,7 @@
       ],
       "expo-web-browser"
     ],
-    "extra": {
-      "CLERK_PUBLISHABLE_KEY": "pk_test_ZW5nYWdpbmctcmFjZXItOTYuY2xlcmsuYWNjb3VudHMuZGV2JA"
-    },
+    "extra": {},
     "experiments": {
       "typedRoutes": true
     }

@@ -90,6 +90,16 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="convivencia"
+        options={{
+          title: 'Convivencia',
+          headerTitle: 'Convivencia',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Icon name={focused ? 'shield-alert' : 'shield-alert-outline'} size={size} color={focused ? Colors.primary : color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="mensajes"
         options={{
           title: 'Mensajes',
