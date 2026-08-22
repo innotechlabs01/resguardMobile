@@ -80,6 +80,16 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="mantenimiento"
+        options={{
+          title: 'Mantenimiento',
+          headerTitle: 'Mantenimiento',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Icon name={focused ? 'wrench' : 'wrench-outline'} size={size} color={focused ? Colors.primary : color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="mensajes"
         options={{
           title: 'Mensajes',
