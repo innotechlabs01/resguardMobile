@@ -161,3 +161,39 @@ export interface RentalProperty {
   ownerName: string;
   ownerUnit: string;
 }
+
+// PQRS Types
+export type PqrsCategory = 'maintenance' | 'noise' | 'security' | 'cleaning' | 'parking' | 'common_areas' | 'billing' | 'other';
+export type PqrsPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type PqrsStatus = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed' | 'reopened';
+
+export interface Pqrs {
+  id: string;
+  building_id: string;
+  created_by: string;
+  created_by_name: string;
+  created_by_unit?: string;
+  subject: string;
+  description: string;
+  category: PqrsCategory;
+  priority: PqrsPriority;
+  status: PqrsStatus;
+  unit?: string;
+  location_detail?: string;
+  assigned_to?: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at?: string;
+  first_response_at?: string;
+}
+
+export interface PqrsComment {
+  id: string;
+  pqrs_id: string;
+  author_id: string;
+  author_name: string;
+  author_role: string;
+  content: string;
+  is_internal: boolean;
+  created_at: string;
+}
