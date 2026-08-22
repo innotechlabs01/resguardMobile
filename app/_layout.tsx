@@ -98,6 +98,15 @@ function InitialLayout() {
           headerStyle: { backgroundColor: Colors.primary },
         }} 
       />
+      <Stack.Screen 
+        name="mensajes/[threadId]" 
+        options={{ 
+          headerShown: true,
+          headerTitle: 'Chat',
+          headerTintColor: '#FFF',
+          headerStyle: { backgroundColor: Colors.primary },
+        }} 
+      />
     </Stack>
   );
 }

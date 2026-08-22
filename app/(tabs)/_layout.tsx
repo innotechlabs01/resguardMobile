@@ -79,6 +79,16 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="mensajes"
+        options={{
+          title: 'Mensajes',
+          headerTitle: 'Mensajes',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Icon name={focused ? 'message-text' : 'message-text-outline'} size={size} color={focused ? Colors.primary : color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
