@@ -7,7 +7,7 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors.secondary,
+        tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.textSecondary,
         tabBarStyle: {
           backgroundColor: Colors.surface,
@@ -35,7 +35,7 @@ export default function TabLayout() {
           title: 'Inicio',
           headerTitle: 'ResGuard',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'home' : 'home-outline'} size={size} color={focused ? Colors.secondary : color} />
+            <Icon name={focused ? 'home' : 'home-outline'} size={size} color={focused ? Colors.primary : color} />
           ),
         }}
       />
@@ -45,7 +45,7 @@ export default function TabLayout() {
           title: 'Citofono',
           headerTitle: 'Citofono',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'phone-in-talk' : 'phone-outline'} size={size} color={focused ? Colors.secondary : color} />
+            <Icon name={focused ? 'phone-in-talk' : 'phone-outline'} size={size} color={focused ? Colors.primary : color} />
           ),
         }}
       />
@@ -55,7 +55,7 @@ export default function TabLayout() {
           title: 'Pagos',
           headerTitle: 'Pagos',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'credit-card' : 'credit-card-outline'} size={size} color={focused ? Colors.secondary : color} />
+            <Icon name={focused ? 'credit-card' : 'credit-card-outline'} size={size} color={focused ? Colors.primary : color} />
           ),
         }}
       />
@@ -65,7 +65,7 @@ export default function TabLayout() {
           title: 'Reservas',
           headerTitle: 'Reservas',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'calendar-check' : 'calendar-outline'} size={size} color={focused ? Colors.secondary : color} />
+            <Icon name={focused ? 'calendar-check' : 'calendar-outline'} size={size} color={focused ? Colors.primary : color} />
           ),
         }}
       />
@@ -75,7 +75,7 @@ export default function TabLayout() {
           title: 'Asambleas',
           headerTitle: 'Asambleas',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'vote' : 'vote-outline'} size={size} color={focused ? Colors.secondary : color} />
+            <Icon name={focused ? 'vote' : 'vote-outline'} size={size} color={focused ? Colors.primary : color} />
           ),
         }}
       />
