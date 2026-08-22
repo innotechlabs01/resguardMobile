@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { View, ScrollView, StyleSheet, Alert, Vibration } from 'react-native';
 import { Card, Text, Button, Surface, Avatar, Divider, Portal, Modal, TextInput } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../../src/lib/theme';
-import { mockUser, mockIntercomCalls, mockIncomingCalls } from '../../src/services/mockData';
 import { IncomingCall, VisitorType } from '../../src/types';
+import { getCallsForUnit, getActiveCallsForUnit, respondToCall } from '../../src/services/intercom';
+import { addNotificationListener } from '../../src/services/pushNotifications';
+import { useAuth } from '../../src/contexts/AuthContext';
 
 const visitorTypeConfig: Record<VisitorType, { label: string; icon: string; color: string; bgColor: string }> = {
   guest: { label: 'Visitante', icon: 'account', color: Colors.text, bgColor: Colors.muted },
@@ -16,19 +18,22 @@ const visitorTypeConfig: Record<VisitorType, { label: string; icon: string; colo
 };
 
 export default function CitofonoScreen() {
-  const [incomingCalls, setIncomingCalls] = useState<IncomingCall[]>(mockIncomingCalls);
+  const { user } = useAuth();
+  const [incomingCalls, setIncomingCalls] = useState<IncomingCall[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isCalling, setIsCalling] = useState(false);
   const [callType, setCallType] = useState<'vigilante' | 'admin' | null>(null);
   const [callModalVisible, setCallModalVisible] = useState(false);
   const [incomingModalVisible, setIncomingModalVisible] = useState(false);
   const [currentIncoming, setCurrentIncoming] = useState<IncomingCall | null>(null);
   const [isRinging, setIsRinging] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // QR Visitor state
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrVisitorName, setQrVisitorName] = useState('');
-  const [qrUnit, setQrUnit] = useState('');
-  const [qrDuration, setQrDuration] = useState<'1h' | '2h' | '4h'>('1h');
+  const [qrUnit, setQrUnit] = useState(user?.unit || '');
+  const [qrDuration, setQrDuration] = useState<'1h' | '2h' | '4h'>('2h');
   const [qrGenerated, setQrGenerated] = useState(false);
   const [qrHistory, setQrHistory] = useState<Array<{
     id: string;
@@ -53,56 +58,52 @@ export default function CitofonoScreen() {
     unit: 'Oficina',
   };
 
+  // Fetch real intercom calls from Supabase
+  const fetchCalls = useCallback(async () => {
+    if (!user?.building_id || !user?.unit) return;
+
+    try {
+      const history = await getCallsForUnit(user.building_id, user.unit, 20);
+      setIncomingCalls(history);
+
+      // Check for active (pending) calls
+      const pending = history.filter(c => c.status === 'ringing');
+      if (pending.length > 0 && !currentIncoming) {
+        setCurrentIncoming(pending[0]);
+        setIncomingModalVisible(true);
+        setIsRinging(true);
+        Vibration.vibrate([0, 500, 200, 500], true);
+      }
+    } catch (error) {
+      console.error('Error fetching calls:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.building_id, user?.unit]);
+
+  // Listen for push notifications
   useEffect(() => {
-    const randomDelay = Math.random() * 10000 + 5000;
-    const timer = setTimeout(() => {
-      simulateIncomingCall();
-    }, randomDelay);
+    const cleanup = addNotificationListener(
+      () => { fetchCalls(); },
+      () => { fetchCalls(); }
+    );
+    return cleanup;
+  }, [fetchCalls]);
 
-    return () => {
-      clearTimeout(timer);
-    };
-  }, []);
-
-  const simulateIncomingCall = async () => {
-    const visitors = [
-      { name: 'Rappi', type: 'rappi' as VisitorType, desc: 'Paquete - 2 bultos' },
-      { name: 'Juan Perez', type: 'guest' as VisitorType, desc: 'Visita - Apto 301', unit: '301' },
-      { name: 'Domisol Express', type: 'delivery' as VisitorType, desc: 'Almuerzo' },
-      { name: 'Taxi', type: 'taxi' as VisitorType, desc: 'Cliente' },
-    ];
-    
-    const random = visitors[Math.floor(Math.random() * visitors.length)];
-    
-    const newCall: IncomingCall = {
-      id: `inc-${Date.now()}`,
-      visitorName: random.name,
-      visitorType: random.type,
-      description: random.desc,
-      unit: random.unit,
-      timestamp: new Date(),
-      status: 'ringing',
-    };
-
-    setCurrentIncoming(newCall);
-    setIncomingModalVisible(true);
-    setIsRinging(true);
-    Vibration.vibrate([0, 500, 200, 500], true);
-  };
-
-  const playRingtone = async () => {
-    // Using vibration only - audio will be added later
-  };
-
-  const stopRingtone = async () => {
-    setIsRinging(false);
-    Vibration.cancel();
-  };
+  // Initial fetch + polling every 5s
+  useEffect(() => {
+    fetchCalls();
+    pollingRef.current = setInterval(fetchCalls, 5000);
+    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+  }, [fetchCalls]);
 
   const handleAccept = async () => {
     if (!currentIncoming) return;
     
-    await stopRingtone();
+    Vibration.cancel();
+    setIsRinging(false);
+
+    const success = await respondToCall(currentIncoming.id, 'approved');
     
     setIncomingCalls(prev => prev.map(call => 
       call.id === currentIncoming.id 
@@ -111,10 +112,13 @@ export default function CitofonoScreen() {
     ));
     
     setIncomingModalVisible(false);
+    setCurrentIncoming(null);
     
     Alert.alert(
       'Visitante Recibido',
-      `Has confirmado la llegada de ${currentIncoming.visitorName}.`,
+      success
+        ? `Has confirmado la llegada de ${currentIncoming.visitorName}.`
+        : `Error al registrar. Intenta de nuevo.`,
       [{ text: 'OK' }]
     );
   };
@@ -122,7 +126,10 @@ export default function CitofonoScreen() {
   const handleDecline = async () => {
     if (!currentIncoming) return;
     
-    await stopRingtone();
+    Vibration.cancel();
+    setIsRinging(false);
+
+    const success = await respondToCall(currentIncoming.id, 'rejected');
     
     setIncomingCalls(prev => prev.map(call => 
       call.id === currentIncoming.id 
@@ -131,10 +138,13 @@ export default function CitofonoScreen() {
     ));
     
     setIncomingModalVisible(false);
+    setCurrentIncoming(null);
     
     Alert.alert(
       'Llamada Rechazada',
-      `Has rechazado la llamada de ${currentIncoming.visitorName}.`,
+      success
+        ? `Has rechazado la llamada de ${currentIncoming.visitorName}.`
+        : `Error al registrar. Intenta de nuevo.`,
       [{ text: 'OK' }]
     );
   };
@@ -245,7 +255,7 @@ export default function CitofonoScreen() {
                 mode="contained" 
                 compact 
                 buttonColor={Colors.success}
-                onPress={() => simulateIncomingCall()}
+                onPress={() => fetchCalls()}
               >
                 Ver
               </Button>
@@ -342,7 +352,7 @@ export default function CitofonoScreen() {
       <Text variant="titleMedium" style={styles.sectionTitle}>Historial de Llamadas</Text>
       <Card style={styles.historyCard}>
         <Card.Content>
-          {incomingCalls.length === 0 && mockIntercomCalls.length === 0 && qrHistory.length === 0 ? (
+          {incomingCalls.length === 0 && qrHistory.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name="phone-off-outline" size={48} color={Colors.textSecondary} />
               <Text variant="bodyMedium" style={styles.emptyText}>
@@ -350,12 +360,11 @@ export default function CitofonoScreen() {
               </Text>
             </View>
           ) : (
-            [...incomingCalls, ...mockIntercomCalls].sort((a, b) => 
-              new Date('timestamp' in b ? b.timestamp : (b as any).startedAt).getTime() - 
-              new Date('timestamp' in a ? a.timestamp : (a as any).startedAt).getTime()
-            ).map((call: any, index) => {
-              const isIncoming = 'visitorType' in call;
-              const typeConfig = isIncoming ? visitorTypeConfig[call.visitorType as VisitorType] : null;
+            [...incomingCalls].sort((a, b) => 
+              new Date(b.timestamp).getTime() - 
+              new Date(a.timestamp).getTime()
+            ).map((call: IncomingCall, index) => {
+              const typeConfig = visitorTypeConfig[call.visitorType as VisitorType];
               const statusConfig = getStatusConfig(call.status);
               
               return (
@@ -363,20 +372,20 @@ export default function CitofonoScreen() {
                   <Surface style={styles.historyItem} elevation={0}>
                     <View style={[styles.historyIcon, { backgroundColor: typeConfig?.bgColor || Colors.muted }]}>
                       <Icon 
-                        name={typeConfig?.icon || (call.callType === 'admin' ? 'account-tie-outline' : 'shield-account-outline')} 
+                        name={typeConfig?.icon || 'phone'} 
                         size={24} 
                         color={typeConfig?.color || Colors.text} 
                       />
                     </View>
                     <View style={styles.historyInfo}>
                       <Text variant="titleSmall" style={styles.historyName}>
-                        {isIncoming ? call.visitorName : (call.callType === 'admin' ? 'Administracion' : 'Vigilante')}
+                        {call.visitorName}
                       </Text>
                       <Text variant="bodySmall" style={styles.historyDesc}>
-                        {isIncoming ? typeConfig?.label : 'Llamada saliente'} - {call.description || 'Llamada'}
+                        {typeConfig?.label || 'Llamada'} - {call.description || 'Sin mensaje'}
                       </Text>
                       <Text variant="bodySmall" style={styles.historyTime}>
-                        {formatCallTime(call.timestamp || call.startedAt)}
+                        {formatCallTime(call.timestamp)}
                       </Text>
                     </View>
                     <View style={styles.historyStatus}>
@@ -388,7 +397,7 @@ export default function CitofonoScreen() {
                       </View>
                     </View>
                   </Surface>
-                  {index < [...incomingCalls, ...mockIntercomCalls].length - 1 && <Divider style={styles.itemDivider} />}
+                  {index < [...incomingCalls].length - 1 && <Divider style={styles.itemDivider} />}
                 </View>
               );
             })

@@ -4,6 +4,7 @@ import { useAuth as useClerkAuth, useUser as useClerkUser } from '@clerk/clerk-e
 import { clerkAuth, ClerkUser } from '../services/clerkAuth';
 import { saveToken, clearToken, getToken, getUserId, isTokenExpired, isTokenNeedingRefresh, hasValidToken } from '../services/tokenStorage';
 import { syncClerkUserToSupabase, getUserProfile, UserProfile } from '../services/userSync';
+import { registerForPushNotifications } from '../services/pushNotifications';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -71,6 +72,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const profile = await getUserProfile(userId);
       setUser(profile);
+
+      // Register push token for intercom notifications
+      registerForPushNotifications(userId).catch(console.error);
     } catch (error) {
       console.error('Login error:', error);
       throw error;
