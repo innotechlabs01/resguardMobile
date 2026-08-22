@@ -109,6 +109,46 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="servicios"
+        options={{
+          title: 'Servicios',
+          headerTitle: 'Servicios',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Icon name={focused ? 'water' : 'water-outline'} size={size} color={focused ? Colors.primary : color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="proveedores"
+        options={{
+          title: 'Proveedores',
+          headerTitle: 'Proveedores',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Icon name={focused ? 'account-group' : 'account-group-outline'} size={size} color={focused ? Colors.primary : color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="encuestas"
+        options={{
+          title: 'Encuestas',
+          headerTitle: 'Encuestas',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Icon name={focused ? 'clipboard-check' : 'clipboard-check-outline'} size={size} color={focused ? Colors.primary : color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="bienvenida"
+        options={{
+          title: 'Bienvenida',
+          headerTitle: 'Bienvenida',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Icon name={focused ? 'hand-wave' : 'hand-wave-outline'} size={size} color={focused ? Colors.primary : color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
