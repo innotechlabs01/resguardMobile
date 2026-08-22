@@ -1,12 +1,37 @@
-import { useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Card, Text, Button, Surface, Chip, Divider } from 'react-native-paper';
+import { useState, useEffect, useCallback } from 'react';
+import { View, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
+import { Card, Text, Button, Surface, Chip, Divider, ActivityIndicator } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../../src/lib/theme';
-import { mockPayments } from '../../src/services/mockData';
+import { getUserPayments } from '../../src/services/payments';
+import { useAuth } from '../../src/contexts/AuthContext';
+
+interface Payment {
+  id: string;
+  amount: number;
+  status: string;
+  type: string;
+  description: string;
+  createdAt: string;
+  boldUrl: string | null;
+  paymentMethod: string | null;
+}
 
 export default function PagosScreen() {
-  const [payments] = useState(mockPayments);
+  const { user } = useAuth();
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchPayments = useCallback(async () => {
+    if (!user?.building_id || !user?.unit) return;
+    const data = await getUserPayments(user.building_id, user.unit);
+    setPayments(data);
+    setLoading(false);
+  }, [user?.building_id, user?.unit]);
+
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-CO', {
@@ -24,41 +49,52 @@ export default function PagosScreen() {
     }).format(new Date(date));
   };
 
-  const pendingPayments = payments.filter(p => p.status === 'pending' || p.status === 'overdue');
+  const pendingPayments = payments.filter(p => p.status === 'pending' || p.status === 'failed');
   const totalPending = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
-  const totalPaid = payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0);
+  const totalPaid = payments.filter(p => p.status === 'succeeded').reduce((sum, p) => sum + p.amount, 0);
 
   const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'paid':
+      case 'succeeded':
         return { label: 'Pagado', color: Colors.success, bgColor: Colors.successContainer, icon: 'check-circle-outline' };
       case 'pending':
         return { label: 'Pendiente', color: Colors.warning, bgColor: Colors.warningContainer, icon: 'clock-outline' };
-      case 'overdue':
-        return { label: 'Vencido', color: Colors.error, bgColor: Colors.errorContainer, icon: 'alert-circle-outline' };
+      case 'failed':
+        return { label: 'Fallido', color: Colors.error, bgColor: Colors.errorContainer, icon: 'alert-circle-outline' };
       default:
         return { label: status, color: Colors.textSecondary, bgColor: Colors.background, icon: 'help-circle-outline' };
     }
   };
 
-  const handlePay = (paymentId: string) => {
-    Alert.alert(
-      'Confirmar Pago',
-      'Estas seguro de realizar este pago?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Pagar', 
-          onPress: () => {
-            Alert.alert('Exito', 'Pago procesado correctamente. Recibiras una confirmacion por correo.');
-          }
-        },
-      ]
-    );
+  const handlePay = (payment: Payment) => {
+    if (payment.boldUrl) {
+      Alert.alert(
+        'Confirmar Pago',
+        `¿Deseas pagar ${formatCurrency(payment.amount)}?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { 
+            text: 'Pagar', 
+            onPress: () => {
+              Linking.openURL(payment.boldUrl!);
+            }
+          },
+        ]
+      );
+    } else {
+      Alert.alert('Info', 'Este pago no tiene link de pago disponible. Contacta al administrador.');
+    }
   };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {loading && (
+        <View style={{ padding: 20, alignItems: 'center' }}>
+          <ActivityIndicator size="small" color={Colors.primary} />
+          <Text variant="bodySmall" style={{ color: Colors.textSecondary, marginTop: 8 }}>Cargando pagos...</Text>
+        </View>
+      )}
+
       <View style={styles.summaryContainer}>
         <Card style={styles.summaryCard}>
           <Card.Content>
@@ -92,7 +128,10 @@ export default function PagosScreen() {
             </View>
             <Button 
               mode="contained" 
-              onPress={() => handlePay('all')}
+              onPress={() => {
+                const firstPending = pendingPayments[0];
+                if (firstPending) handlePay(firstPending);
+              }}
               style={{ backgroundColor: Colors.primary }}
             >
               Pagar Todo
@@ -111,17 +150,17 @@ export default function PagosScreen() {
                 <Surface style={styles.paymentItem} elevation={0}>
                   <View style={styles.paymentIcon}>
                     <Icon 
-                      name={payment.concept.includes('Parqueadero') ? 'car-outline' : 'home-outline'} 
+                      name={payment.type === 'overtime_fee' ? 'car-outline' : 'home-outline'} 
                       size={24} 
                       color={Colors.text} 
                     />
                   </View>
                   <View style={styles.paymentInfo}>
                     <Text variant="bodyMedium" style={{ fontWeight: '500' }}>
-                      {payment.concept}
+                      {payment.description}
                     </Text>
                     <Text variant="bodySmall" style={styles.paymentDate}>
-                      {formatDate(payment.date)}
+                      {formatDate(new Date(payment.createdAt))}
                     </Text>
                   </View>
                   <View style={styles.paymentRight}>
@@ -153,7 +192,7 @@ export default function PagosScreen() {
                       mode="contained" 
                       compact 
                       icon="credit-card-outline"
-                      onPress={() => handlePay(payment.id)}
+                      onPress={() => handlePay(payment)}
                       style={{ backgroundColor: Colors.primary }}
                     >
                       Pagar
