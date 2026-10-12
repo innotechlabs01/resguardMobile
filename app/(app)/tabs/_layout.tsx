@@ -1,24 +1,23 @@
 import { Tabs } from 'expo-router';
-import { Colors } from '../../src/lib/theme';
-import { View, StyleSheet } from 'react-native';
+import { Colors } from '../../../src/lib/theme';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors.secondary,
+        tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.textSecondary,
         tabBarStyle: {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
-          height: 60,
-          paddingBottom: 8,
+          height: 72,
+          paddingBottom: 10,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '500',
+          fontWeight: '600',
         },
         headerStyle: {
           backgroundColor: Colors.primary,
@@ -35,7 +34,7 @@ export default function TabLayout() {
           title: 'Inicio',
           headerTitle: 'ResGuard',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'home' : 'home-outline'} size={size} color={focused ? Colors.secondary : color} />
+            <Icon name={focused ? 'home' : 'home-outline'} size={size} color={focused ? Colors.primary : color} />
           ),
         }}
       />
@@ -45,7 +44,7 @@ export default function TabLayout() {
           title: 'Citofono',
           headerTitle: 'Citofono',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'phone-in-talk' : 'phone-outline'} size={size} color={focused ? Colors.secondary : color} />
+            <Icon name={focused ? 'phone-in-talk' : 'phone-outline'} size={size} color={focused ? Colors.primary : color} />
           ),
         }}
       />
@@ -55,7 +54,7 @@ export default function TabLayout() {
           title: 'Pagos',
           headerTitle: 'Pagos',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'credit-card' : 'credit-card-outline'} size={size} color={focused ? Colors.secondary : color} />
+            <Icon name={focused ? 'credit-card' : 'credit-card-outline'} size={size} color={focused ? Colors.primary : color} />
           ),
         }}
       />
@@ -65,17 +64,7 @@ export default function TabLayout() {
           title: 'Reservas',
           headerTitle: 'Reservas',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'calendar-check' : 'calendar-outline'} size={size} color={focused ? Colors.secondary : color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="asambleas"
-        options={{
-          title: 'Asambleas',
-          headerTitle: 'Asambleas',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'vote' : 'vote-outline'} size={size} color={focused ? Colors.secondary : color} />
+            <Icon name={focused ? 'calendar-check' : 'calendar-outline'} size={size} color={focused ? Colors.primary : color} />
           ),
         }}
       />

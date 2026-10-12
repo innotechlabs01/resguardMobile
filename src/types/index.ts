@@ -103,9 +103,14 @@ export interface Assembly {
   buildingId: string;
   title: string;
   description: string;
-  startDate: Date;
-  endDate: Date;
-  status: 'upcoming' | 'active' | 'closed';
+  date?: string;
+  time?: string;
+  location?: string;
+  /** @deprecated Use date + time to match the DB schema. */
+  startDate?: Date;
+  /** @deprecated Use date + time to match the DB schema. */
+  endDate?: Date;
+  status: 'scheduled' | 'active' | 'completed' | 'cancelled';
   createdBy: string;
   createdAt: Date;
   agendaItems: AgendaItem[];
@@ -120,6 +125,8 @@ export interface AgendaItem {
   options: VoteOption[];
   hasVoted?: boolean;
   userVote?: string;
+  voteCounts?: Record<string, number>;
+  totalVotes?: number;
 }
 
 export interface VoteOption {
@@ -135,6 +142,7 @@ export interface Vote {
   userId: string;
   encryptedVote: string;
   voteHash: string;
+  optionId?: string;
   createdAt: Date;
 }
 
@@ -160,4 +168,40 @@ export interface RentalProperty {
   status: 'available' | 'rented';
   ownerName: string;
   ownerUnit: string;
+}
+
+// PQRS Types
+export type PqrsCategory = 'maintenance' | 'noise' | 'security' | 'cleaning' | 'parking' | 'common_areas' | 'billing' | 'other';
+export type PqrsPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type PqrsStatus = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed' | 'reopened';
+
+export interface Pqrs {
+  id: string;
+  building_id: string;
+  created_by: string;
+  created_by_name: string;
+  created_by_unit?: string;
+  subject: string;
+  description: string;
+  category: PqrsCategory;
+  priority: PqrsPriority;
+  status: PqrsStatus;
+  unit?: string;
+  location_detail?: string;
+  assigned_to?: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at?: string;
+  first_response_at?: string;
+}
+
+export interface PqrsComment {
+  id: string;
+  pqrs_id: string;
+  author_id: string;
+  author_name: string;
+  author_role: string;
+  content: string;
+  is_internal: boolean;
+  created_at: string;
 }

@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { View, ScrollView, StyleSheet, Alert, Vibration } from 'react-native';
-import { Card, Text, Button, Surface, Avatar, Divider, Portal, Modal } from 'react-native-paper';
+import { Card, Text, Button, Surface, Avatar, Divider, Portal, Modal, TextInput } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../../src/lib/theme';
-import { mockUser, mockIntercomCalls, mockIncomingCalls } from '../../src/services/mockData';
-import { IncomingCall, VisitorType } from '../../src/types';
+import { Colors } from '../../../src/lib/theme';
+import { IncomingCall, VisitorType } from '../../../src/types';
+import { getCallsForUnit, getActiveCallsForUnit, respondToCall } from '../../../src/services/intercom';
+import { addNotificationListener } from '../../../src/services/pushNotifications';
+import { useAuth } from '../../../src/contexts/AuthContext';
 
 const visitorTypeConfig: Record<VisitorType, { label: string; icon: string; color: string; bgColor: string }> = {
   guest: { label: 'Visitante', icon: 'account', color: Colors.text, bgColor: Colors.muted },
@@ -16,13 +18,31 @@ const visitorTypeConfig: Record<VisitorType, { label: string; icon: string; colo
 };
 
 export default function CitofonoScreen() {
-  const [incomingCalls, setIncomingCalls] = useState<IncomingCall[]>(mockIncomingCalls);
+  const { user } = useAuth();
+  const [incomingCalls, setIncomingCalls] = useState<IncomingCall[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isCalling, setIsCalling] = useState(false);
   const [callType, setCallType] = useState<'vigilante' | 'admin' | null>(null);
   const [callModalVisible, setCallModalVisible] = useState(false);
   const [incomingModalVisible, setIncomingModalVisible] = useState(false);
   const [currentIncoming, setCurrentIncoming] = useState<IncomingCall | null>(null);
   const [isRinging, setIsRinging] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // QR Visitor state
+  const [qrModalVisible, setQrModalVisible] = useState(false);
+  const [qrVisitorName, setQrVisitorName] = useState('');
+  const [qrUnit, setQrUnit] = useState(user?.unit || '');
+  const [qrDuration, setQrDuration] = useState<'1h' | '2h' | '4h'>('2h');
+  const [qrGenerated, setQrGenerated] = useState(false);
+  const [qrHistory, setQrHistory] = useState<Array<{
+    id: string;
+    visitorName: string;
+    unit: string;
+    duration: string;
+    status: 'pending' | 'used' | 'expired';
+    timestamp: Date;
+  }>>([]);
 
   const vigilante = {
     id: 'vigilante-1',
@@ -38,56 +58,52 @@ export default function CitofonoScreen() {
     unit: 'Oficina',
   };
 
+  // Fetch real intercom calls from Supabase
+  const fetchCalls = useCallback(async () => {
+    if (!user?.building_id || !user?.unit) return;
+
+    try {
+      const history = await getCallsForUnit(user.building_id, user.unit, 20);
+      setIncomingCalls(history);
+
+      // Check for active (pending) calls
+      const pending = history.filter(c => c.status === 'ringing');
+      if (pending.length > 0 && !currentIncoming) {
+        setCurrentIncoming(pending[0]);
+        setIncomingModalVisible(true);
+        setIsRinging(true);
+        Vibration.vibrate([0, 500, 200, 500], true);
+      }
+    } catch (error) {
+      console.error('Error fetching calls:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.building_id, user?.unit]);
+
+  // Listen for push notifications
   useEffect(() => {
-    const randomDelay = Math.random() * 10000 + 5000;
-    const timer = setTimeout(() => {
-      simulateIncomingCall();
-    }, randomDelay);
+    const cleanup = addNotificationListener(
+      () => { fetchCalls(); },
+      () => { fetchCalls(); }
+    );
+    return cleanup;
+  }, [fetchCalls]);
 
-    return () => {
-      clearTimeout(timer);
-    };
-  }, []);
-
-  const simulateIncomingCall = async () => {
-    const visitors = [
-      { name: 'Rappi', type: 'rappi' as VisitorType, desc: 'Paquete - 2 bultos' },
-      { name: 'Juan Perez', type: 'guest' as VisitorType, desc: 'Visita - Apto 301', unit: '301' },
-      { name: 'Domisol Express', type: 'delivery' as VisitorType, desc: 'Almuerzo' },
-      { name: 'Taxi', type: 'taxi' as VisitorType, desc: 'Cliente' },
-    ];
-    
-    const random = visitors[Math.floor(Math.random() * visitors.length)];
-    
-    const newCall: IncomingCall = {
-      id: `inc-${Date.now()}`,
-      visitorName: random.name,
-      visitorType: random.type,
-      description: random.desc,
-      unit: random.unit,
-      timestamp: new Date(),
-      status: 'ringing',
-    };
-
-    setCurrentIncoming(newCall);
-    setIncomingModalVisible(true);
-    setIsRinging(true);
-    Vibration.vibrate([0, 500, 200, 500], true);
-  };
-
-  const playRingtone = async () => {
-    // Using vibration only - audio will be added later
-  };
-
-  const stopRingtone = async () => {
-    setIsRinging(false);
-    Vibration.cancel();
-  };
+  // Initial fetch + polling every 5s
+  useEffect(() => {
+    fetchCalls();
+    pollingRef.current = setInterval(fetchCalls, 5000);
+    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+  }, [fetchCalls]);
 
   const handleAccept = async () => {
     if (!currentIncoming) return;
     
-    await stopRingtone();
+    Vibration.cancel();
+    setIsRinging(false);
+
+    const success = await respondToCall(currentIncoming.id, 'approved');
     
     setIncomingCalls(prev => prev.map(call => 
       call.id === currentIncoming.id 
@@ -96,10 +112,13 @@ export default function CitofonoScreen() {
     ));
     
     setIncomingModalVisible(false);
+    setCurrentIncoming(null);
     
     Alert.alert(
       'Visitante Recibido',
-      `Has confirmado la llegada de ${currentIncoming.visitorName}.`,
+      success
+        ? `Has confirmado la llegada de ${currentIncoming.visitorName}.`
+        : `Error al registrar. Intenta de nuevo.`,
       [{ text: 'OK' }]
     );
   };
@@ -107,7 +126,10 @@ export default function CitofonoScreen() {
   const handleDecline = async () => {
     if (!currentIncoming) return;
     
-    await stopRingtone();
+    Vibration.cancel();
+    setIsRinging(false);
+
+    const success = await respondToCall(currentIncoming.id, 'rejected');
     
     setIncomingCalls(prev => prev.map(call => 
       call.id === currentIncoming.id 
@@ -116,10 +138,13 @@ export default function CitofonoScreen() {
     ));
     
     setIncomingModalVisible(false);
+    setCurrentIncoming(null);
     
     Alert.alert(
       'Llamada Rechazada',
-      `Has rechazado la llamada de ${currentIncoming.visitorName}.`,
+      success
+        ? `Has rechazado la llamada de ${currentIncoming.visitorName}.`
+        : `Error al registrar. Intenta de nuevo.`,
       [{ text: 'OK' }]
     );
   };
@@ -138,6 +163,45 @@ export default function CitofonoScreen() {
       );
       setCallModalVisible(false);
     }, 3000);
+  };
+
+  const handleGenerateQR = () => {
+    if (!qrVisitorName.trim()) {
+      Alert.alert('Error', 'Ingresa el nombre del visitante');
+      return;
+    }
+    if (!qrUnit.trim()) {
+      Alert.alert('Error', 'Ingresa la unidad destino');
+      return;
+    }
+
+    const newQR = {
+      id: `qr-${Date.now()}`,
+      visitorName: qrVisitorName.trim(),
+      unit: qrUnit.trim(),
+      duration: qrDuration,
+      status: 'pending' as const,
+      timestamp: new Date(),
+    };
+
+    setQrHistory(prev => [newQR, ...prev]);
+    setQrGenerated(true);
+
+    // Auto-expire QR after duration
+    const durationMs = qrDuration === '1h' ? 3600000 : qrDuration === '2h' ? 7200000 : 14400000;
+    setTimeout(() => {
+      setQrHistory(prev => prev.map(qr =>
+        qr.id === newQR.id ? { ...qr, status: 'expired' as const } : qr
+      ));
+    }, durationMs);
+  };
+
+  const resetQRModal = () => {
+    setQrModalVisible(false);
+    setQrVisitorName('');
+    setQrUnit('');
+    setQrDuration('1h');
+    setQrGenerated(false);
   };
 
   const formatDuration = (seconds: number) => {
@@ -191,7 +255,7 @@ export default function CitofonoScreen() {
                 mode="contained" 
                 compact 
                 buttonColor={Colors.success}
-                onPress={() => simulateIncomingCall()}
+                onPress={() => fetchCalls()}
               >
                 Ver
               </Button>
@@ -219,6 +283,18 @@ export default function CitofonoScreen() {
           labelStyle={styles.callButtonLabel}
         >
           Llamar Admin
+        </Button>
+      </View>
+
+      <View style={styles.qrSection}>
+        <Button
+          mode="contained"
+          icon="qrcode"
+          onPress={() => setQrModalVisible(true)}
+          style={[styles.qrButton, { backgroundColor: Colors.secondary }]}
+          labelStyle={styles.qrButtonLabel}
+        >
+          Generar QR Visitante
         </Button>
       </View>
 
@@ -276,7 +352,7 @@ export default function CitofonoScreen() {
       <Text variant="titleMedium" style={styles.sectionTitle}>Historial de Llamadas</Text>
       <Card style={styles.historyCard}>
         <Card.Content>
-          {incomingCalls.length === 0 && mockIntercomCalls.length === 0 ? (
+          {incomingCalls.length === 0 && qrHistory.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name="phone-off-outline" size={48} color={Colors.textSecondary} />
               <Text variant="bodyMedium" style={styles.emptyText}>
@@ -284,12 +360,11 @@ export default function CitofonoScreen() {
               </Text>
             </View>
           ) : (
-            [...incomingCalls, ...mockIntercomCalls].sort((a, b) => 
-              new Date('timestamp' in b ? b.timestamp : (b as any).startedAt).getTime() - 
-              new Date('timestamp' in a ? a.timestamp : (a as any).startedAt).getTime()
-            ).map((call: any, index) => {
-              const isIncoming = 'visitorType' in call;
-              const typeConfig = isIncoming ? visitorTypeConfig[call.visitorType as VisitorType] : null;
+            [...incomingCalls].sort((a, b) => 
+              new Date(b.timestamp).getTime() - 
+              new Date(a.timestamp).getTime()
+            ).map((call: IncomingCall, index) => {
+              const typeConfig = visitorTypeConfig[call.visitorType as VisitorType];
               const statusConfig = getStatusConfig(call.status);
               
               return (
@@ -297,20 +372,20 @@ export default function CitofonoScreen() {
                   <Surface style={styles.historyItem} elevation={0}>
                     <View style={[styles.historyIcon, { backgroundColor: typeConfig?.bgColor || Colors.muted }]}>
                       <Icon 
-                        name={typeConfig?.icon || (call.callType === 'admin' ? 'account-tie-outline' : 'shield-account-outline')} 
+                        name={typeConfig?.icon || 'phone'} 
                         size={24} 
                         color={typeConfig?.color || Colors.text} 
                       />
                     </View>
                     <View style={styles.historyInfo}>
                       <Text variant="titleSmall" style={styles.historyName}>
-                        {isIncoming ? call.visitorName : (call.callType === 'admin' ? 'Administracion' : 'Vigilante')}
+                        {call.visitorName}
                       </Text>
                       <Text variant="bodySmall" style={styles.historyDesc}>
-                        {isIncoming ? typeConfig?.label : 'Llamada saliente'} - {call.description || 'Llamada'}
+                        {typeConfig?.label || 'Llamada'} - {call.description || 'Sin mensaje'}
                       </Text>
                       <Text variant="bodySmall" style={styles.historyTime}>
-                        {formatCallTime(call.timestamp || call.startedAt)}
+                        {formatCallTime(call.timestamp)}
                       </Text>
                     </View>
                     <View style={styles.historyStatus}>
@@ -322,10 +397,54 @@ export default function CitofonoScreen() {
                       </View>
                     </View>
                   </Surface>
-                  {index < [...incomingCalls, ...mockIntercomCalls].length - 1 && <Divider style={styles.itemDivider} />}
+                  {index < [...incomingCalls].length - 1 && <Divider style={styles.itemDivider} />}
                 </View>
               );
             })
+          )}
+
+          {qrHistory.length > 0 && (
+            <>
+              <Divider style={styles.divider} />
+              <Text variant="bodySmall" style={styles.qrHistoryTitle}>QR Generados</Text>
+              {qrHistory.map((qr, index) => {
+                const qrStatusConfig = qr.status === 'pending'
+                  ? { label: 'Pendiente', color: Colors.warning, icon: 'clock-outline' }
+                  : qr.status === 'used'
+                    ? { label: 'Usado', color: Colors.success, icon: 'check-circle' }
+                    : { label: 'Expirado', color: Colors.error, icon: 'close-circle' };
+
+                return (
+                  <View key={qr.id}>
+                    <Surface style={styles.historyItem} elevation={0}>
+                      <View style={[styles.historyIcon, { backgroundColor: Colors.infoContainer }]}>
+                        <Icon name="qrcode" size={24} color={Colors.info} />
+                      </View>
+                      <View style={styles.historyInfo}>
+                        <Text variant="titleSmall" style={styles.historyName}>
+                          {qr.visitorName}
+                        </Text>
+                        <Text variant="bodySmall" style={styles.historyDesc}>
+                          Apto {qr.unit} - {qr.duration}
+                        </Text>
+                        <Text variant="bodySmall" style={styles.historyTime}>
+                          {formatCallTime(qr.timestamp)}
+                        </Text>
+                      </View>
+                      <View style={styles.historyStatus}>
+                        <View style={styles.statusContainer}>
+                          <Icon name={qrStatusConfig.icon} size={14} color={qrStatusConfig.color} />
+                          <Text variant="bodySmall" style={[styles.statusText, { color: qrStatusConfig.color }]}>
+                            {qrStatusConfig.label}
+                          </Text>
+                        </View>
+                      </View>
+                    </Surface>
+                    {index < qrHistory.length - 1 && <Divider style={styles.itemDivider} />}
+                  </View>
+                );
+              })}
+            </>
           )}
         </Card.Content>
       </Card>
@@ -450,6 +569,112 @@ export default function CitofonoScreen() {
                 Terminar
               </Button>
             </View>
+          </View>
+        </Modal>
+      </Portal>
+
+      <Portal>
+        <Modal
+          visible={qrModalVisible}
+          onDismiss={resetQRModal}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <View style={styles.qrModal}>
+            {!qrGenerated ? (
+              <>
+                <Icon name="qrcode" size={48} color={Colors.primary} />
+                <Text variant="titleLarge" style={styles.qrModalTitle}>
+                  Generar QR Visitante
+                </Text>
+                <Text variant="bodySmall" style={styles.qrModalSubtitle}>
+                  Crea un codigo QR para el acceso del visitante
+                </Text>
+
+                <TextInput
+                  mode="outlined"
+                  label="Nombre del visitante"
+                  value={qrVisitorName}
+                  onChangeText={setQrVisitorName}
+                  style={styles.qrInput}
+                  outlineStyle={styles.qrInputOutline}
+                />
+
+                <TextInput
+                  mode="outlined"
+                  label="Unidad destino"
+                  value={qrUnit}
+                  onChangeText={setQrUnit}
+                  placeholder="Ej: 301"
+                  style={styles.qrInput}
+                  outlineStyle={styles.qrInputOutline}
+                />
+
+                <Text variant="bodySmall" style={styles.durationLabel}>Duracion de acceso</Text>
+                <View style={styles.durationSelector}>
+                  {(['1h', '2h', '4h'] as const).map((d) => (
+                    <Button
+                      key={d}
+                      mode={qrDuration === d ? 'contained' : 'outlined'}
+                      compact
+                      onPress={() => setQrDuration(d)}
+                      style={[
+                        styles.durationButton,
+                        qrDuration === d && { backgroundColor: Colors.primary },
+                      ]}
+                      labelStyle={qrDuration === d ? { color: '#FFF' } : { color: Colors.text }}
+                    >
+                      {d}
+                    </Button>
+                  ))}
+                </View>
+
+                <Button
+                  mode="contained"
+                  icon="qrcode"
+                  onPress={handleGenerateQR}
+                  style={[styles.generateButton, { backgroundColor: Colors.primary }]}
+                  contentStyle={{ paddingVertical: 6 }}
+                >
+                  Generar QR
+                </Button>
+              </>
+            ) : (
+              <>
+                <View style={styles.qrDisplay}>
+                  <Icon name="qrcode" size={120} color={Colors.primary} />
+                </View>
+
+                <Text variant="titleLarge" style={styles.qrVisitorName}>
+                  {qrVisitorName}
+                </Text>
+
+                <View style={styles.qrInfo}>
+                  <View style={styles.qrInfoRow}>
+                    <Icon name="home-outline" size={16} color={Colors.textSecondary} />
+                    <Text variant="bodySmall" style={styles.qrInfoText}>Apto {qrUnit}</Text>
+                  </View>
+                  <View style={styles.qrInfoRow}>
+                    <Icon name="clock-outline" size={16} color={Colors.textSecondary} />
+                    <Text variant="bodySmall" style={styles.qrInfoText}>Expira en {qrDuration}</Text>
+                  </View>
+                </View>
+
+                <Surface style={styles.qrStatusBadge} elevation={0}>
+                  <Icon name="clock-outline" size={14} color={Colors.warning} />
+                  <Text variant="bodySmall" style={[styles.qrStatusText, { color: Colors.warning }]}>
+                    Pendiente de uso
+                  </Text>
+                </Surface>
+
+                <Button
+                  mode="outlined"
+                  onPress={resetQRModal}
+                  style={styles.closeQRButton}
+                >
+                  Cerrar
+                </Button>
+              </>
+            )}
           </View>
         </Modal>
       </Portal>
@@ -704,6 +929,116 @@ const styles = StyleSheet.create({
   },
   callActionsModal: {
     marginTop: 32,
+    width: '100%',
+  },
+  qrSection: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  qrButton: {
+    borderRadius: 12,
+  },
+  qrButtonLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  qrHistoryTitle: {
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginTop: 8,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  qrModal: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+  },
+  qrModalTitle: {
+    fontWeight: 'bold',
+    color: Colors.text,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  qrModalSubtitle: {
+    color: Colors.textSecondary,
+    marginBottom: 20,
+  },
+  qrInput: {
+    width: '100%',
+    marginBottom: 12,
+    backgroundColor: Colors.surface,
+  },
+  qrInputOutline: {
+    borderRadius: 12,
+  },
+  durationLabel: {
+    color: Colors.textSecondary,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  durationSelector: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+    marginBottom: 20,
+  },
+  durationButton: {
+    flex: 1,
+    borderRadius: 8,
+  },
+  generateButton: {
+    width: '100%',
+    borderRadius: 12,
+  },
+  qrDisplay: {
+    width: 160,
+    height: 160,
+    borderRadius: 16,
+    backgroundColor: Colors.muted,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
+  },
+  qrVisitorName: {
+    fontWeight: 'bold',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  qrInfo: {
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  qrInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  qrInfoText: {
+    color: Colors.textSecondary,
+  },
+  qrStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+    backgroundColor: Colors.warningContainer,
+    marginBottom: 16,
+  },
+  qrStatusText: {
+    fontWeight: '500',
+  },
+  closeQRButton: {
+    borderRadius: 12,
     width: '100%',
   },
 });

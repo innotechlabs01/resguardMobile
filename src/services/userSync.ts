@@ -2,46 +2,42 @@ import { supabase } from './supabase';
 
 export interface UserProfile {
   id: string;
-  clerk_user_id: string;
   email: string;
+  name: string;
   display_name: string;
+  unit?: string;
   role: string;
   building_id: string | null;
-  unit?: string;
   created_at: string;
 }
 
-export async function syncClerkUserToSupabase(clerkUser: {
+export async function syncUserToSupabase(user: {
   id: string;
   email: string;
   fullName: string;
-  firstName?: string;
-  lastName?: string;
   buildingId?: string;
   role?: string;
   unit?: string;
 }): Promise<{ success: boolean; profile?: UserProfile; error?: string }> {
   try {
-    const displayName = clerkUser.fullName || 
-      `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || 
-      clerkUser.email;
+    const displayName = user.fullName || user.email;
 
     const { data: existingProfile } = await supabase
-      .from('profiles')
+      .from('users')
       .select('*')
-      .eq('clerk_user_id', clerkUser.id)
+      .eq('id', user.id)
       .single();
 
     if (existingProfile) {
       const { data: updatedProfile, error: updateError } = await supabase
-        .from('profiles')
+        .from('users')
         .update({
-          email: clerkUser.email,
-          display_name: displayName,
-          building_id: clerkUser.buildingId || existingProfile.building_id,
-          role: clerkUser.role || existingProfile.role,
+          email: user.email,
+          name: displayName,
+          building_id: user.buildingId || existingProfile.building_id,
+          role: user.role || existingProfile.role,
         })
-        .eq('clerk_user_id', clerkUser.id)
+        .eq('id', user.id)
         .select()
         .single();
 
@@ -53,13 +49,13 @@ export async function syncClerkUserToSupabase(clerkUser: {
     }
 
     const { data: newProfile, error: insertError } = await supabase
-      .from('profiles')
+      .from('users')
       .insert({
-        clerk_user_id: clerkUser.id,
-        email: clerkUser.email,
-        display_name: displayName,
-        role: clerkUser.role || 'usuario',
-        building_id: clerkUser.buildingId || null,
+        id: user.id,
+        email: user.email,
+        name: displayName,
+        role: user.role || 'usuario',
+        building_id: user.buildingId || null,
       })
       .select()
       .single();
@@ -78,12 +74,12 @@ export async function syncClerkUserToSupabase(clerkUser: {
   }
 }
 
-export async function getUserProfile(clerkUserId: string): Promise<UserProfile | null> {
+export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   try {
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')
       .select('*')
-      .eq('clerk_user_id', clerkUserId)
+      .eq('id', userId)
       .single();
 
     if (error) {
@@ -98,12 +94,12 @@ export async function getUserProfile(clerkUserId: string): Promise<UserProfile |
   }
 }
 
-export async function updateUserRole(clerkUserId: string, role: string): Promise<boolean> {
+export async function updateUserRole(userId: string, role: string): Promise<boolean> {
   try {
     const { error } = await supabase
-      .from('profiles')
+      .from('users')
       .update({ role })
-      .eq('clerk_user_id', clerkUserId);
+      .eq('id', userId);
 
     return !error;
   } catch (error) {
@@ -112,12 +108,12 @@ export async function updateUserRole(clerkUserId: string, role: string): Promise
   }
 }
 
-export async function updateUserBuilding(clerkUserId: string, buildingId: string): Promise<boolean> {
+export async function updateUserBuilding(userId: string, buildingId: string): Promise<boolean> {
   try {
     const { error } = await supabase
-      .from('profiles')
+      .from('users')
       .update({ building_id: buildingId })
-      .eq('clerk_user_id', clerkUserId);
+      .eq('id', userId);
 
     return !error;
   } catch (error) {

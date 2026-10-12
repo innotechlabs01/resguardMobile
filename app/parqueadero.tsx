@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Card, Text, Button, Surface, Chip, Divider, TextInput, Portal, Modal } from 'react-native-paper';
+import { Card, Text, Button, Surface, Chip, Divider, TextInput, Portal, Modal, ActivityIndicator } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../src/lib/theme';
 import { mockParkingRequests } from '../src/services/mockData';
 import { ParkingRequest } from '../src/types';
+import { getParkingAssignments, ParkingAssignment } from '../src/services/parking-assignments';
+import { useAuth } from '../src/contexts/AuthContext';
 
 export default function ParqueaderoScreen() {
+  const { user } = useAuth();
   const [requests, setRequests] = useState<ParkingRequest[]>(mockParkingRequests);
+  const [assignments, setAssignments] = useState<ParkingAssignment[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [formData, setFormData] = useState({
     visitorName: '',
@@ -24,6 +29,17 @@ export default function ParqueaderoScreen() {
       year: 'numeric',
     });
   };
+
+  const fetchAssignments = useCallback(async () => {
+    if (!user?.building_id) return;
+    const data = await getParkingAssignments(user.building_id);
+    setAssignments(data);
+    setLoadingAssignments(false);
+  }, [user?.building_id]);
+
+  useEffect(() => {
+    fetchAssignments();
+  }, [fetchAssignments]);
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -86,6 +102,80 @@ export default function ParqueaderoScreen() {
           </Card.Content>
         </Card>
       </View>
+
+      {/* PARQUEADEROS DEL EDIFICIO (asignaciones reales) */}
+      <Text variant="titleMedium" style={styles.sectionTitle}>Parqueaderos del Edificio</Text>
+      {loadingAssignments ? (
+        <View style={{ padding: 16, alignItems: 'center' }}>
+          <ActivityIndicator size="small" color={Colors.primary} />
+        </View>
+      ) : assignments.length === 0 ? (
+        <Card style={styles.requestsCard}>
+          <Card.Content>
+            <View style={styles.emptyState}>
+              <Icon name="parking" size={48} color={Colors.textSecondary} />
+              <Text variant="bodySmall" style={styles.emptyText}>No hay parqueaderos registrados</Text>
+            </View>
+          </Card.Content>
+        </Card>
+      ) : (
+        <Card style={styles.requestsCard}>
+          <Card.Content>
+            {assignments.map((a, index) => (
+              <View key={a.id}>
+                <Surface style={styles.assignmentItem} elevation={0}>
+                  <View style={[styles.assignmentBadge, {
+                    backgroundColor: a.assignment_type === 'owner' ? Colors.infoContainer
+                      : a.assignment_type === 'rented' ? Colors.warningContainer
+                      : Colors.successContainer
+                  }]}>
+                    <Icon
+                      name={a.assignment_type === 'owner' ? 'car' : a.assignment_type === 'rented' ? 'car-key' : 'parking'}
+                      size={20}
+                      color={a.assignment_type === 'owner' ? Colors.info : a.assignment_type === 'rented' ? Colors.warning : Colors.success}
+                    />
+                  </View>
+                  <View style={styles.assignmentInfo}>
+                    <View style={styles.assignmentHeader}>
+                      <Text variant="bodyMedium" style={{ fontWeight: '600' }}>{a.spot_code}</Text>
+                      <Chip compact style={{
+                        backgroundColor: a.assignment_type === 'owner' ? Colors.infoContainer
+                          : a.assignment_type === 'rented' ? Colors.warningContainer
+                          : Colors.successContainer
+                      }}>
+                        <Text style={{
+                          color: a.assignment_type === 'owner' ? Colors.info
+                            : a.assignment_type === 'rented' ? Colors.warning
+                            : Colors.success,
+                          fontSize: 10
+                        }}>
+                          {a.assignment_type === 'owner' ? 'Propietario' : a.assignment_type === 'rented' ? 'Alquilado' : 'Disponible'}
+                        </Text>
+                      </Chip>
+                    </View>
+                    {a.assignment_type === 'owner' && (
+                      <Text variant="bodySmall" style={styles.assignmentDetail}>
+                        {a.owner_name || 'Propietario'}{a.owner_unit ? ` • ${a.owner_unit}` : ''}
+                      </Text>
+                    )}
+                    {a.assignment_type === 'rented' && (
+                      <Text variant="bodySmall" style={styles.assignmentDetail}>
+                        {a.tenant_name || 'Inquilino'}{a.tenant_unit ? ` • ${a.tenant_unit}` : ''}
+                      </Text>
+                    )}
+                    {a.vehicle_plate && (
+                      <Text variant="bodySmall" style={styles.assignmentVehicle}>
+                        🚗 {a.vehicle_plate}{a.vehicle_brand ? ` • ${a.vehicle_brand}` : ''}{a.vehicle_color ? ` • ${a.vehicle_color}` : ''}
+                      </Text>
+                    )}
+                  </View>
+                </Surface>
+                {index < assignments.length - 1 && <Divider style={styles.itemDivider} />}
+              </View>
+            ))}
+          </Card.Content>
+        </Card>
+      )}
 
       <View style={styles.buttonContainer}>
         <Button
@@ -336,6 +426,39 @@ const styles = StyleSheet.create({
   emptyText: {
     color: Colors.textSecondary,
     marginTop: 12,
+  },
+  assignmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+  },
+  assignmentBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  assignmentInfo: {
+    flex: 1,
+  },
+  assignmentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  assignmentDetail: {
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  assignmentVehicle: {
+    color: Colors.text,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  itemDivider: {
+    marginVertical: 4,
   },
   infoCard: {
     marginHorizontal: 16,

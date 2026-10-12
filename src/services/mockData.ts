@@ -18,7 +18,7 @@ export const mockUser: User = {
   email: 'juan.perez@email.com',
   displayName: 'Juan Perez',
   role: 'resident',
-  buildingId: 'building-1',
+  buildingId: '11111111-1111-4111-8111-111111111111',
   unit: '301',
   buildingName: 'Torres del Parque',
 };
@@ -163,7 +163,7 @@ export const mockIntercomCalls: IntercomCall[] = [
 export const mockAssemblies: Assembly[] = [
   {
     id: 'assembly-1',
-    buildingId: 'building-1',
+    buildingId: '11111111-1111-4111-8111-111111111111',
     title: 'Asamblea Ordinaria 2026',
     description: 'Asunta ordinaria para presentar informes de gestion y aprobar presupuesto del ano 2026.',
     startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -217,12 +217,12 @@ export const mockAssemblies: Assembly[] = [
   },
   {
     id: 'assembly-2',
-    buildingId: 'building-1',
+    buildingId: '11111111-1111-4111-8111-111111111111',
     title: 'Asunta Extraordinaria - Piscina',
     description: 'Asunta extraordinaria para decidir sobre el cierre temporal de la piscina por reparaciones.',
     startDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
     endDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-    status: 'closed',
+    status: 'completed',
     createdBy: 'admin-1',
     createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
     agendaItems: [

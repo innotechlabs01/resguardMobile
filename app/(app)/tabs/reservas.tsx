@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Card, Text, Button, Surface, Chip, Portal, Modal, TextInput } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../../src/lib/theme';
-import { mockReservations, mockCommonAreas } from '../../src/services/mockData';
-import { Reservation, CommonArea } from '../../src/types';
+import { Colors } from '../../../src/lib/theme';
+import { mockReservations, mockCommonAreas } from '../../../src/services/mockData';
+import { Reservation, CommonArea } from '../../../src/types';
 
 export default function ReservasScreen() {
   const [reservations, setReservations] = useState<Reservation[]>(mockReservations);

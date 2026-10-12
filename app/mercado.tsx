@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
-import { Card, Text, Button, Surface, Chip, TextInput, Portal, Modal, Divider } from 'react-native-paper';
+import { Card, Text, Button, Surface, Chip, TextInput, Portal, Modal, Divider, ActivityIndicator } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../src/lib/theme';
-import { mockMarketplaceItems } from '../src/services/mockData';
 import { MarketplaceItem } from '../src/types';
+import { getMarketplaceProducts, createMarketplaceProduct } from '../src/services/marketplace';
+import { useAuth } from '../src/contexts/AuthContext';
 
 const categoryConfig: Record<string, { label: string; icon: string; color: string }> = {
   food: { label: 'Comida', icon: 'food-outline', color: Colors.textSecondary },
@@ -15,10 +16,13 @@ const categoryConfig: Record<string, { label: string; icon: string; color: strin
 };
 
 export default function MercadoScreen() {
-  const [products, setProducts] = useState<MarketplaceItem[]>(mockMarketplaceItems);
+  const { user } = useAuth();
+  const [products, setProducts] = useState<MarketplaceItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -28,6 +32,17 @@ export default function MercadoScreen() {
     whatsapp: '',
   });
 
+  const fetchProducts = useCallback(async () => {
+    if (!user?.building_id) return;
+    const data = await getMarketplaceProducts(user.building_id);
+    setProducts(data);
+    setLoading(false);
+  }, [user?.building_id]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
@@ -36,8 +51,8 @@ export default function MercadoScreen() {
     }).format(amount);
   };
 
-  const myProducts = products.filter((p) => p.sellerUnit === '301');
-  const otherProducts = products.filter((p) => p.sellerUnit !== '301');
+  const myProducts = products.filter((p) => p.sellerUnit === user?.unit);
+  const otherProducts = products.filter((p) => p.sellerUnit !== user?.unit);
 
   const filteredProducts = products.filter((p) => {
     const matchSearch = p.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -46,28 +61,35 @@ export default function MercadoScreen() {
     return matchSearch && matchCategory;
   });
 
-  const handleCreate = () => {
-    if (!formData.title || !formData.price) {
+  const handleCreate = async () => {
+    if (!formData.title || !formData.price || !user) {
       Alert.alert('Error', 'Por favor completa los campos requeridos.');
       return;
     }
 
-    const newProduct: MarketplaceItem = {
-      id: Date.now().toString(),
+    setCreating(true);
+    const newProduct = await createMarketplaceProduct({
+      building_id: user.building_id!,
+      seller_id: user.id,
+      seller_name: user.display_name || user.email,
+      seller_unit: user.unit || '',
       title: formData.title,
       description: formData.description,
       price: parseInt(formData.price.replace(/\D/g, '')) || 0,
       category: formData.category,
-      sellerName: 'Juan Perez',
-      sellerUnit: '301',
-      createdAt: new Date(),
-      status: 'active',
-    };
+      contact_phone: formData.contactPhone || undefined,
+      whatsapp: formData.whatsapp || undefined,
+    });
+    setCreating(false);
 
-    setProducts([newProduct, ...products]);
-    setShowCreate(false);
-    setFormData({ title: '', description: '', price: '', category: 'services', contactPhone: '', whatsapp: '' });
-    Alert.alert('Exito', 'Publicacion creada correctamente.');
+    if (newProduct) {
+      setProducts([newProduct, ...products]);
+      setShowCreate(false);
+      setFormData({ title: '', description: '', price: '', category: 'services', contactPhone: '', whatsapp: '' });
+      Alert.alert('Éxito', 'Publicación creada correctamente.');
+    } else {
+      Alert.alert('Error', 'No se pudo crear la publicación.');
+    }
   };
 
   const handleWhatsApp = (phone: string) => {
@@ -87,6 +109,13 @@ export default function MercadoScreen() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {loading && (
+        <View style={{ padding: 20, alignItems: 'center' }}>
+          <ActivityIndicator size="small" color={Colors.primary} />
+          <Text variant="bodySmall" style={{ color: Colors.textSecondary, marginTop: 8 }}>Cargando productos...</Text>
+        </View>
+      )}
+
       <View style={styles.statsContainer}>
         <Card style={styles.statCard}>
           <Card.Content style={styles.statContent}>
@@ -220,7 +249,7 @@ export default function MercadoScreen() {
                             mode="contained-tonal"
                             compact
                             icon="whatsapp"
-                            onPress={() => handleWhatsApp('3001234567')}
+                            onPress={() => handleWhatsApp(product.sellerUnit ? `300${product.sellerUnit}` : '3001234567')}
                             style={{ backgroundColor: Colors.muted }}
                             labelStyle={{ color: Colors.text }}
                           >
@@ -318,7 +347,8 @@ export default function MercadoScreen() {
                 mode="contained" 
                 onPress={handleCreate} 
                 style={{ flex: 1, backgroundColor: Colors.primary }}
-                disabled={!formData.title || !formData.price}
+                disabled={!formData.title || !formData.price || creating}
+                loading={creating}
               >
                 Publicar
               </Button>
