@@ -29,6 +29,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const uid = data.user?.id;
     if (!uid) throw new Error('No user');
     const profile = await getUserProfile(uid);
+    if (!profile) {
+      await supabase.auth.signOut();
+      setUser(null);
+      throw new Error('Tu cuenta no tiene perfil asociado. Contacta al administrador de tu edificio.');
+    }
     setUser(profile);
     registerForPushNotifications(uid).catch(console.error);
   }, []);
@@ -53,13 +58,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => { checkAuth(); }, [checkAuth]);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const profile = await getUserProfile(session.user.id);
-        setUser(profile);
-      } else {
-        setUser(null);
-      }
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      // checkAuth already loads the initial session; only react to changes.
+      if (event === 'INITIAL_SESSION') return;
+      // Defer Supabase calls out of the listener to avoid deadlocks.
+      setTimeout(async () => {
+        if (session?.user) {
+          const profile = await getUserProfile(session.user.id);
+          setUser(profile);
+        } else {
+          setUser(null);
+        }
+      }, 0);
     });
     return () => sub.subscription.unsubscribe();
   }, []);

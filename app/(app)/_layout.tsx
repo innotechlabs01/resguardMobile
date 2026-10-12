@@ -10,13 +10,11 @@ import { supabase } from '../../src/services/supabase';
 function CustomDrawerContent(props: any) {
   const { user } = useAuth();
   const [buildingName, setBuildingName] = useState<string | null>(null);
-  const [unit, setUnit] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
-      if (!user?.id) { setBuildingName(null); setUnit(null); return; }
-      const { data: userData } = await supabase.from('users').select('building_id, unit').eq('id', user.id).single();
-      setUnit(userData?.unit ?? null);
+      if (!user?.id) { setBuildingName(null); return; }
+      const { data: userData } = await supabase.from('users').select('building_id').eq('id', user.id).single();
       if (userData?.building_id) {
         const { data: b } = await supabase.from('buildings').select('name').eq('id', userData.building_id).single();
         setBuildingName(b?.name ?? null);
@@ -28,8 +26,7 @@ function CustomDrawerContent(props: any) {
   }, [user?.id]);
 
   const displayName = user?.name || user?.email || 'Usuario';
-  const unitLabel = unit ? `Unidad ${unit}` : '';
-  const buildingInfo = buildingName ? `${buildingName}${unitLabel ? ' • ' + unitLabel : ''}` : user?.building_id ? `Edificio ${user.building_id}${unitLabel ? ' • ' + unitLabel : ''}` : 'Sin edificio asignado';
+  const buildingInfo = buildingName ?? (user?.building_id ? `Edificio ${user.building_id}` : 'Sin edificio asignado');
 
   return (
     <DrawerContentScrollView {...props} contentContainerStyle={{ paddingTop: 12 }}>
