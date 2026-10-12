@@ -75,11 +75,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   useEffect(() => {
-    const inAuthGroup = segments[0] === undefined;
-    if (!isLoading) {
-      if (!user && inAuthGroup) router.replace('/splash' as any);
-      else if (user && inAuthGroup) router.replace('/(app)/tabs' as any);
-    }
+    if (isLoading) return;
+    const inProtectedGroup = segments[0] === '(app)';
+    const inPublicScreen =
+      segments[0] === 'login' || segments[0] === 'splash' || segments[0] === 'bienvenida';
+    // Session expired/revoked while inside (app) -> bounce to /login.
+    if (!user && inProtectedGroup) router.replace('/login' as any);
+    else if (user && inPublicScreen) router.replace('/(app)/tabs' as any);
   }, [segments, user, isLoading, router]);
 
   const value: AuthContextType = {

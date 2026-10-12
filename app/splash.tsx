@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../src/lib/theme';
 import { supabase } from '../src/services/supabase';
+import { getUserProfile } from '../src/services/userSync';
 
 export default function SplashScreen() {
   const router = useRouter();
@@ -12,7 +13,16 @@ export default function SplashScreen() {
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      router.replace((session ? '/(app)/tabs' : '/login') as any);
+      if (session?.user) {
+        const profile = await getUserProfile(session.user.id);
+        if (profile) {
+          router.replace('/(app)/tabs' as any);
+          return;
+        }
+        // Session exists but profile row is gone -> force re-login.
+        await supabase.auth.signOut();
+      }
+      router.replace('/login' as any);
     };
 
     checkSession();
