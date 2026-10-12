@@ -140,3 +140,17 @@ export async function submitReply(id: string, reply: string): Promise<boolean> {
   }
   return true;
 }
+
+// ── Get evidences ──
+export async function getInfractionEvidences(infractionId: string): Promise<InfractionEvidence[]> {
+  const { data, error } = await supabase
+    .from('infraction_evidences')
+    .select('*')
+    .eq('infraction_id', infractionId)
+    .order('created_at', { ascending: true });
+  if (error) {
+    console.error('Error fetching evidences:', error);
+    return [];
+  }
+  return (data || []) as InfractionEvidence[];
+}

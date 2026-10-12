@@ -20,7 +20,7 @@ export const getUser = async (userId: string) => {
   const { data, error } = await supabase
     .from('users')
     .select('*')
-    .eq('clerk_user_id', userId)
+    .eq('id', userId)
     .single();
 
   if (error) throw error;
@@ -87,7 +87,7 @@ export const getAssemblies = async (buildingId: string) => {
     .from('assemblies')
     .select('*, agenda_items(*)')
     .eq('building_id', buildingId)
-    .order('start_date', { ascending: false });
+    .order('date', { ascending: false });
 
   if (error) throw error;
   return data;
@@ -97,7 +97,8 @@ export const submitVote = async (
   agendaItemId: string,
   userId: string,
   encryptedVote: string,
-  voteHash: string
+  voteHash: string,
+  optionId: string
 ) => {
   const { data, error } = await supabase
     .from('votes')
@@ -106,12 +107,78 @@ export const submitVote = async (
       user_id: userId,
       encrypted_vote: encryptedVote,
       vote_hash: voteHash,
+      option_id: optionId,
     })
     .select()
     .single();
 
   if (error) throw error;
   return data;
+};
+
+// Build a { option_id -> count } map plus total from raw vote rows (option_id column).
+const buildVoteCounts = (voteRows: { option_id: string | null }[]) => {
+  const voteCounts: Record<string, number> = {};
+  let total = 0;
+  for (const v of voteRows) {
+    if (v.option_id) voteCounts[v.option_id] = (voteCounts[v.option_id] ?? 0) + 1;
+    total += 1;
+  }
+  return { voteCounts, total };
+};
+
+export const getAgendaItemsWithVoteState = async (
+  assemblyId: string,
+  userId: string
+) => {
+  const { data: items, error } = await supabase
+    .from('agenda_items')
+    .select('*')
+    .eq('assembly_id', assemblyId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+
+  const enriched = await Promise.all(
+    (items ?? []).map(async (item) => {
+      const [{ data: userVote, error: voteErr }, { data: allVotes, error: allErr }] =
+        await Promise.all([
+          supabase
+            .from('votes')
+            .select('option_id')
+            .eq('agenda_item_id', item.id)
+            .eq('user_id', userId)
+            .maybeSingle(),
+          supabase.from('votes').select('option_id').eq('agenda_item_id', item.id),
+        ]);
+
+      if (voteErr) throw voteErr;
+      if (allErr) throw allErr;
+
+      const { voteCounts, total } = buildVoteCounts((allVotes ?? []) as { option_id: string | null }[]);
+
+      return {
+        ...item,
+        hasVoted: !!userVote?.option_id,
+        userVote: userVote?.option_id ?? undefined,
+        voteCounts,
+        totalVotes: total,
+      };
+    })
+  );
+
+  return enriched;
+};
+
+export const getVoteResults = async (agendaItemId: string) => {
+  const { data, error } = await supabase
+    .from('votes')
+    .select('option_id')
+    .eq('agenda_item_id', agendaItemId);
+
+  if (error) throw error;
+  const { voteCounts, total } = buildVoteCounts((data ?? []) as { option_id: string | null }[]);
+  return { ...voteCounts, total };
 };
 
 export const saveIntercomCall = async (call: {

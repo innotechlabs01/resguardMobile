@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { View, ScrollView, StyleSheet, Alert, Vibration } from 'react-native';
 import { Card, Text, Button, Surface, Avatar, Divider, Portal, Modal, TextInput } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../../src/lib/theme';
+import { Colors } from '../../../src/lib/theme';
 import { IncomingCall, VisitorType } from '../../src/types';
 import { getCallsForUnit, getActiveCallsForUnit, respondToCall } from '../../src/services/intercom';
 import { addNotificationListener } from '../../src/services/pushNotifications';

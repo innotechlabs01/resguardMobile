@@ -1,19 +1,32 @@
 import * as Crypto from 'expo-crypto';
 
-export const encryptVote = async (vote: string): Promise<{ encrypted: string; hash: string }> => {
+export interface VotePayload {
+  agendaItemId: string;
+  optionId: string;
+  userId: string;
+}
+
+export interface EncryptedVote {
+  encrypted_vote: string;
+  vote_hash: string;
+}
+
+export const encryptVote = async (payload: VotePayload): Promise<EncryptedVote> => {
+  const vote = `${payload.agendaItemId}:${payload.optionId}:${payload.userId}`;
+
   const encoder = new TextEncoder();
   const voteData = encoder.encode(vote);
-  
+
   const hash = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,
     vote + Date.now().toString()
   );
-  
+
   const encrypted = btoa(vote + '|' + hash.substring(0, 16));
-  
+
   return {
-    encrypted,
-    hash,
+    encrypted_vote: encrypted,
+    vote_hash: hash,
   };
 };
 

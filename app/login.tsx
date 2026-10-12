@@ -42,7 +42,7 @@ export default function LoginScreen() {
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('*')
-          .eq('clerk_user_id', authData.user.id)
+          .eq('id', authData.user.id)
           .single();
 
         if (profileError && profileError.code !== 'PGRST116') {

@@ -103,9 +103,14 @@ export interface Assembly {
   buildingId: string;
   title: string;
   description: string;
-  startDate: Date;
-  endDate: Date;
-  status: 'upcoming' | 'active' | 'closed';
+  date?: string;
+  time?: string;
+  location?: string;
+  /** @deprecated Use date + time to match the DB schema. */
+  startDate?: Date;
+  /** @deprecated Use date + time to match the DB schema. */
+  endDate?: Date;
+  status: 'scheduled' | 'active' | 'completed' | 'cancelled';
   createdBy: string;
   createdAt: Date;
   agendaItems: AgendaItem[];
@@ -120,6 +125,8 @@ export interface AgendaItem {
   options: VoteOption[];
   hasVoted?: boolean;
   userVote?: string;
+  voteCounts?: Record<string, number>;
+  totalVotes?: number;
 }
 
 export interface VoteOption {
@@ -135,6 +142,7 @@ export interface Vote {
   userId: string;
   encryptedVote: string;
   voteHash: string;
+  optionId?: string;
   createdAt: Date;
 }
 

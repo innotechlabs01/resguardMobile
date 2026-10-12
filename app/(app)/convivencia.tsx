@@ -5,6 +5,9 @@ import {
   StyleSheet,
   Alert,
   RefreshControl,
+  Image,
+  Pressable,
+  Linking,
 } from 'react-native';
 import {
   Card,
@@ -16,14 +19,16 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../../src/lib/theme';
+import { Colors } from '../../../src/lib/theme';
 import { useAuth } from '../../src/contexts/AuthContext';
 import {
   getInfractionsByUser,
   reportInfraction,
   getInfractionById,
   submitReply,
+  getInfractionEvidences,
   InfractionItem,
+  InfractionEvidence,
 } from '../../src/services/infractions';
 
 const infractionTypeConfig: Record<string, { label: string; icon: string; color: string; bgColor: string }> = {
@@ -53,6 +58,7 @@ export default function ConvivenciaScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedInfraction, setSelectedInfraction] = useState<InfractionItem | null>(null);
+  const [evidences, setEvidences] = useState<InfractionEvidence[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [filterTab, setFilterTab] = useState('all');
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -103,8 +109,12 @@ export default function ConvivenciaScreen() {
     setSelectedInfraction(infraction);
     setLoadingDetail(true);
     try {
-      const data = await getInfractionById(infraction.id);
+      const [data, ev] = await Promise.all([
+        getInfractionById(infraction.id),
+        getInfractionEvidences(infraction.id),
+      ]);
       if (data) setSelectedInfraction(data);
+      setEvidences(ev);
     } catch (err) {
       console.error('Error fetching detail:', err);
     } finally {
@@ -178,7 +188,7 @@ export default function ConvivenciaScreen() {
         <Button
           mode="text"
           icon="arrow-left"
-          onPress={() => { setSelectedInfraction(null); setReplyText(''); fetchMyInfractions(); }}
+          onPress={() => { setSelectedInfraction(null); setEvidences([]); setReplyText(''); fetchMyInfractions(); }}
           style={styles.backButton}
           labelStyle={styles.backLabel}
         >
@@ -306,6 +316,44 @@ export default function ConvivenciaScreen() {
             <Text variant="bodySmall" style={styles.decisionNotes}>{selectedInfraction.admin_notes}</Text>
           </Surface>
         )}
+
+        {/* Evidencias */}
+        <Surface style={styles.evidenceSection} elevation={0}>
+          <Text variant="titleSmall" style={styles.sectionTitle}>Evidencias ({evidences.length})</Text>
+          {evidences.length === 0 ? (
+            <Text variant="bodySmall" style={{ color: Colors.textSecondary }}>Sin evidencias</Text>
+          ) : (
+            evidences.map(ev => {
+              const isPhoto = ev.type === 'photo' || ev.url.startsWith('data:image');
+              if (isPhoto) {
+                return (
+                  <Pressable key={ev.id} onPress={() => Linking.openURL(ev.url)}>
+                    <Image
+                      source={{ uri: ev.url }}
+                      style={styles.evidenceImg}
+                      resizeMode="cover"
+                    />
+                  </Pressable>
+                );
+              }
+              return (
+                <View key={ev.id} style={styles.evidenceRow}>
+                  <Icon
+                    name={ev.type === 'audio' ? 'file-music' : 'file-document'}
+                    size={20}
+                    color={Colors.textSecondary}
+                  />
+                  <Text variant="bodyMedium" style={styles.evidenceLabel}>
+                    {ev.type === 'audio' ? 'Audio' : 'Documento'}
+                  </Text>
+                  <Pressable onPress={() => Linking.openURL(ev.url)}>
+                    <Text variant="bodySmall" style={styles.evidenceLink}>Abrir</Text>
+                  </Pressable>
+                </View>
+              );
+            })
+          )}
+        </Surface>
 
         <View style={{ height: 30 }} />
       </ScrollView>
@@ -752,6 +800,34 @@ const styles = StyleSheet.create({
   decisionNotes: {
     color: Colors.textSecondary,
     fontSize: 13,
+  },
+  // Evidencias
+  evidenceSection: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: Colors.surface,
+  },
+  evidenceImg: {
+    width: '100%',
+    height: 160,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  evidenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  evidenceLabel: {
+    flex: 1,
+    color: Colors.text,
+  },
+  evidenceLink: {
+    color: Colors.primary,
+    fontWeight: '600',
   },
   // Modal
   modalOverlay: {

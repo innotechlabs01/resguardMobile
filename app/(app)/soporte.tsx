@@ -21,7 +21,7 @@ import {
   SegmentedButtons,
 } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../../src/lib/theme';
+import { Colors } from '../../../src/lib/theme';
 import { useAuth } from '../../src/contexts/AuthContext';
 import {
   getPqrsByUser,
@@ -180,6 +180,28 @@ export default function SoporteScreen() {
     }
   };
 
+  // Resident self-service: close (mark resolved) or reopen a ticket
+  const handleToggleStatus = async () => {
+    if (!selectedPqrs) return;
+    const isResolvedOrClosed = selectedPqrs.status === 'resolved' || selectedPqrs.status === 'closed';
+    const targetStatus = isResolvedOrClosed ? 'reopened' : 'resolved';
+    try {
+      const success = await respondToPqrs(selectedPqrs.id, targetStatus);
+      if (success) {
+        setSelectedPqrs(prev => prev ? { ...prev, status: targetStatus } : null);
+        if (isResolvedOrClosed) {
+          Alert.alert('Listo', 'PQRS reabierto');
+        } else {
+          Alert.alert('Listo', 'PQRS marcado como resuelto');
+        }
+      } else {
+        Alert.alert('Error', isResolvedOrClosed ? 'No se pudo reabrir el PQRS' : 'No se pudo marcar el PQRS como resuelto');
+      }
+    } catch (err) {
+      Alert.alert('Error', isResolvedOrClosed ? 'No se pudo reabrir el PQRS' : 'No se pudo marcar el PQRS como resuelto');
+    }
+  };
+
   // Filter PQRS
   const filteredPqrs = pqrsList.filter(p => {
     if (filterTab === 'all') return true;
@@ -309,6 +331,29 @@ export default function SoporteScreen() {
             Enviar
           </Button>
         </Surface>
+
+        {/* Self-service: resident closes or reopens their ticket */}
+        {selectedPqrs.status === 'resolved' || selectedPqrs.status === 'closed' ? (
+          <Button
+            mode="outlined"
+            icon="refresh"
+            onPress={handleToggleStatus}
+            style={styles.selfServiceButton}
+            textColor={Colors.primary}
+          >
+            Reabrir PQRS
+          </Button>
+        ) : (
+          <Button
+            mode="outlined"
+            icon="check-circle"
+            onPress={handleToggleStatus}
+            style={styles.selfServiceButton}
+            textColor={Colors.primary}
+          >
+            Marcar como resuelto
+          </Button>
+        )}
 
         <View style={{ height: 30 }} />
       </ScrollView>
@@ -799,6 +844,13 @@ const styles = StyleSheet.create({
   sendButton: {
     alignSelf: 'flex-end',
     borderRadius: 8,
+  },
+  // Self-service
+  selfServiceButton: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 10,
+    borderColor: Colors.primary,
   },
   // Modal
   modalContainer: {

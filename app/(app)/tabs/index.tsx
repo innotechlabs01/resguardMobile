@@ -3,7 +3,7 @@ import { View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { Card, Text, Button, Surface, Avatar, Chip } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../../src/lib/theme';
+import { Colors } from '../../../src/lib/theme';
 import { mockUser, mockPayments, mockCommunications, mockReservations } from '../../src/services/mockData';
 
 interface QuickAction {

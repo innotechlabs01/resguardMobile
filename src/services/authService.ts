@@ -1,4 +1,4 @@
-import { clerkAuth } from './clerkAuth';
+import { supabase } from './supabase';
 import * as database from './database';
 import { logger } from '../lib/logger';
 
@@ -14,20 +14,21 @@ export interface AuthUser {
 
 export async function signInWithEmail(email: string, password: string): Promise<{ user: AuthUser | null; error: string | null }> {
   try {
-    const clerkUser = await clerkAuth.signIn(email, password);
-    
-    const userId = clerkUser.id;
-    const token = await clerkAuth.getToken() || '';
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data.user) throw error || new Error('Login failed');
+
+    const userId = data.user.id;
+    const token = await supabase.auth.getSession().then(s => s.data.session?.access_token || '');
 
     const profile = await database.getUser(userId);
     
     const user: AuthUser = {
       id: userId,
-      email: profile?.email || clerkUser.email || email,
-      displayName: profile?.display_name || clerkUser.fullName || email.split('@')[0],
-      role: profile?.role || clerkUser.role || 'usuario',
-      buildingId: profile?.building_id || clerkUser.buildingId || undefined,
-      unit: profile?.unit || clerkUser.unit || undefined,
+      email: profile?.email || email,
+      displayName: profile?.display_name || email.split('@')[0],
+      role: profile?.role || 'usuario',
+      buildingId: profile?.building_id || undefined,
+      unit: profile?.unit || undefined,
       token,
     };
 
@@ -53,7 +54,7 @@ export async function signInWithEmail(email: string, password: string): Promise<
 
 export async function signOut(): Promise<void> {
   try {
-    await clerkAuth.signOut();
+    await supabase.auth.signOut();
     logger.log('User signed out successfully');
   } catch (error) {
     logger.error('Sign out error:', error);
@@ -63,14 +64,11 @@ export async function signOut(): Promise<void> {
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
   try {
-    const clerkUser = await clerkAuth.getCurrentUser();
-    
-    if (!clerkUser) {
-      return null;
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
 
-    const userId = clerkUser.id;
-    const token = await clerkAuth.getToken() || '';
+    const userId = user.id;
+    const token = (await supabase.auth.getSession()).data.session?.access_token || '';
     const profile = await database.getUser(userId);
 
     if (!profile) {
@@ -100,7 +98,7 @@ export async function refreshUserData(userId: string): Promise<AuthUser | null> 
       return null;
     }
 
-    const token = await clerkAuth.getToken() || '';
+    const token = (await supabase.auth.getSession()).data.session?.access_token || '';
 
     return {
       id: userId,
