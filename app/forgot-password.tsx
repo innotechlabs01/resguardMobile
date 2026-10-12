@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, TextInput as RNTextInput } from 'react-native';
 import { Text, Surface, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
@@ -17,18 +17,36 @@ export default function ForgotPasswordScreen() {
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clear the cooldown interval on unmount / navigation to avoid leaks and
+  // setState on an unmounted component.
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
 
   const startCooldown = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
     setCooldown(RESEND_COOLDOWN_S);
     const interval = setInterval(() => {
       setCooldown((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
+          if (intervalRef.current === interval) {
+            intervalRef.current = null;
+          }
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
+    intervalRef.current = interval;
   };
 
   const sendCode = async (normalized: string): Promise<boolean> => {
