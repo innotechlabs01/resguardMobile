@@ -4,30 +4,19 @@ import { Text, Surface } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../src/lib/theme';
-import { useAuthStore } from '../src/stores/authStore';
+import { supabase } from '../src/services/supabase';
 
 export default function SplashScreen() {
   const router = useRouter();
-  const { isAuthenticated, isLoading, setLoading } = useAuthStore();
 
   useEffect(() => {
-    const checkAuth = async () => {
-      setLoading(true);
-      
-      // Allow time for store to hydrate
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setLoading(false);
-      
-      if (isAuthenticated) {
-        router.replace('/(tabs)' as any);
-      } else {
-        router.replace('/login' as any);
-      }
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      router.replace((session ? '/(app)/tabs' : '/login') as any);
     };
 
-    checkAuth();
-  }, []);
+    checkSession();
+  }, [router]);
 
   return (
     <View style={styles.container}>

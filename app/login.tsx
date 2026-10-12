@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TextInput as RNTextInput, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput as RNTextInput } from 'react-native';
 import { Text, Surface, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../src/lib/theme';
-import { useAuthStore } from '../src/stores/authStore';
-import { supabase } from '../src/services/supabase';
+import { useAuth } from '../src/contexts/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuthStore();
-  
+  const { login } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -26,48 +25,8 @@ export default function LoginScreen() {
     setError('');
 
     try {
-      // Authenticate with Supabase
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password: password,
-      });
-
-      if (authError) {
-        setError(authError.message || 'Error al iniciar sesion');
-        return;
-      }
-
-      if (authData.user) {
-        // Get user profile from profiles table
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', authData.user.id)
-          .single();
-
-        if (profileError && profileError.code !== 'PGRST116') {
-          console.log('Profile error:', profileError);
-        }
-
-        // Create user object
-        const user = {
-          id: authData.user.id,
-          email: authData.user.email || email,
-          displayName: profile?.display_name || authData.user.email?.split('@')[0] || 'Usuario',
-          role: profile?.role || 'usuario',
-          buildingId: profile?.building_id || undefined,
-          unit: profile?.unit || undefined,
-        };
-
-        // Save to Zustand store
-        login(user, authData.session?.access_token || '');
-
-        Alert.alert(
-          'Bienvenido',
-          `Hola ${user.displayName}, has iniciado sesion correctamente.`,
-          [{ text: 'OK', onPress: () => router.replace('/(tabs)' as any) }]
-        );
-      }
+      await login(email.trim().toLowerCase(), password);
+      router.replace('/(app)/tabs' as any);
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'Error al iniciar sesion');
