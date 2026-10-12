@@ -3,8 +3,8 @@ import { View, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
 import { Card, Text, Button, Surface, Chip, Divider, ActivityIndicator } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../../../src/lib/theme';
-import { getUserPayments } from '../../src/services/payments';
-import { useAuth } from '../../src/contexts/AuthContext';
+import { getUserPayments } from '../../../src/services/payments';
+import { useAuth } from '../../../src/contexts/AuthContext';
 
 interface Payment {
   id: string;

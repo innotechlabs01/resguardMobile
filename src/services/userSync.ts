@@ -4,6 +4,8 @@ export interface UserProfile {
   id: string;
   email: string;
   name: string;
+  display_name: string;
+  unit?: string;
   role: string;
   building_id: string | null;
   created_at: string;

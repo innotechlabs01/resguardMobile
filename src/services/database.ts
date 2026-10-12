@@ -3,7 +3,7 @@ import * as supabase from './supabase';
 export interface UserProfile {
   id: string | number;
   email: string;
-  display_name: string;
+  display_name?: string;
   role: string;
   building_id: string | null;
   unit?: string;

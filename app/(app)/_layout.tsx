@@ -1,5 +1,5 @@
 import { Drawer } from 'expo-router/drawer';
-import { Colors } from '../../../src/lib/theme';
+import { Colors } from '../../src/lib/theme';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { View, Text, StyleSheet } from 'react-native';
 import { DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
@@ -7,7 +7,7 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../src/services/supabase';
 
-function CustomDrawerContent(props) {
+function CustomDrawerContent(props: any) {
   const { user } = useAuth();
   const [buildingName, setBuildingName] = useState<string | null>(null);
   const [unit, setUnit] = useState<string | null>(null);

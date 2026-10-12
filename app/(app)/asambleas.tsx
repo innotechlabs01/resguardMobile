@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { Card, Text, Button, Surface, Chip, RadioButton, Portal, Modal, Divider } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../../../src/lib/theme';
+import { Colors } from '../../src/lib/theme';
 import * as database from '../../src/services/database';
 import { encryptVote } from '../../src/services/voting';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -256,7 +256,7 @@ export default function AsambleasScreen() {
   const activeAssembly = assemblies.find(a => a.status === 'active');
   const scheduledAssemblies = assemblies
     .filter(a => a.status === 'scheduled')
-    .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    .sort((a,b) => new Date(a.date ?? '').getTime() - new Date(b.date ?? '').getTime());
   const nextScheduled = scheduledAssemblies[0];
 
   if (isLoading) {
@@ -439,7 +439,7 @@ export default function AsambleasScreen() {
               </Card.Content>
             </Card>
           );
-        })}
+        })()}
         </View>
       )}
 

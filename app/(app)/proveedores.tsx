@@ -21,7 +21,7 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../../../src/lib/theme';
+import { Colors } from '../../src/lib/theme';
 import { useAuth } from '../../src/contexts/AuthContext';
 import {
   getProviders,

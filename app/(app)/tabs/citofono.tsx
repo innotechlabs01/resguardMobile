@@ -3,10 +3,10 @@ import { View, ScrollView, StyleSheet, Alert, Vibration } from 'react-native';
 import { Card, Text, Button, Surface, Avatar, Divider, Portal, Modal, TextInput } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../../../src/lib/theme';
-import { IncomingCall, VisitorType } from '../../src/types';
-import { getCallsForUnit, getActiveCallsForUnit, respondToCall } from '../../src/services/intercom';
-import { addNotificationListener } from '../../src/services/pushNotifications';
-import { useAuth } from '../../src/contexts/AuthContext';
+import { IncomingCall, VisitorType } from '../../../src/types';
+import { getCallsForUnit, getActiveCallsForUnit, respondToCall } from '../../../src/services/intercom';
+import { addNotificationListener } from '../../../src/services/pushNotifications';
+import { useAuth } from '../../../src/contexts/AuthContext';
 
 const visitorTypeConfig: Record<VisitorType, { label: string; icon: string; color: string; bgColor: string }> = {
   guest: { label: 'Visitante', icon: 'account', color: Colors.text, bgColor: Colors.muted },
