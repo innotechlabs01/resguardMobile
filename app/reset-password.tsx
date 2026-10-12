@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, TextInput as RNTextInput } from 'react-native';
 import { Text, Surface, Button } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -7,6 +7,7 @@ import { Colors } from '../src/lib/theme';
 import { supabase } from '../src/services/supabase';
 
 const MAX_ATTEMPTS = 3;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type ErrorKind = 'invalid_code' | 'network' | 'validation' | 'expired' | null;
 
@@ -23,6 +24,14 @@ export default function ResetPasswordScreen() {
   const [attempts, setAttempts] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  // Guard: this screen needs a valid email (from forgot-password). Deep links,
+  // hot reload or malformed params can land here without one — restart the flow.
+  useEffect(() => {
+    if (!EMAIL_REGEX.test(email)) {
+      router.replace('/forgot-password' as any);
+    }
+  }, [email, router]);
 
   const handleReset = async () => {
     setCodeError('');
@@ -55,6 +64,12 @@ export default function ResetPasswordScreen() {
 
       if (verifyError) {
         console.error('verifyOtp error:', verifyError);
+        // auth-js v2: expired codes come back with error.code === 'otp_expired'
+        if (verifyError.code === 'otp_expired') {
+          setErrorKind('expired');
+          setCodeError('El código expiró. Solicita uno nuevo.');
+          return;
+        }
         const nextAttempts = attempts + 1;
         setAttempts(nextAttempts);
         setErrorKind('invalid_code');
@@ -70,6 +85,9 @@ export default function ResetPasswordScreen() {
 
       if (updateError) {
         console.error('updateUser error:', updateError);
+        // verifyOtp already opened a recovery session; don't leave it active —
+        // sign out globally so the user must restart the flow.
+        await supabase.auth.signOut({ scope: 'global' });
         setErrorKind('network');
         setCodeError('Ocurrió un error. Intenta de nuevo en unos momentos.');
         return;
