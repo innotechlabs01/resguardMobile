@@ -1,4 +1,4 @@
-import { clerkAuth } from './clerkAuth';
+import { supabase } from './supabase';
 import * as database from './database';
 import { logger } from '../lib/logger';
 
@@ -14,20 +14,31 @@ export interface AuthUser {
 
 export async function signInWithEmail(email: string, password: string): Promise<{ user: AuthUser | null; error: string | null }> {
   try {
-    const clerkUser = await clerkAuth.signIn(email, password);
-    
-    const userId = clerkUser.id;
-    const token = await clerkAuth.getToken() || '';
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+
+    if (authError) {
+      return { user: null, error: authError.message || 'Error al iniciar sesión' };
+    }
+
+    if (!authData.user || !authData.session) {
+      return { user: null, error: 'No se pudo obtener la sesión' };
+    }
+
+    const userId = authData.user.id;
+    const token = authData.session.access_token;
 
     const profile = await database.getUser(userId);
     
     const user: AuthUser = {
       id: userId,
-      email: profile?.email || clerkUser.email || email,
-      displayName: profile?.display_name || clerkUser.fullName || email.split('@')[0],
-      role: profile?.role || clerkUser.role || 'usuario',
-      buildingId: profile?.building_id || clerkUser.buildingId || undefined,
-      unit: profile?.unit || clerkUser.unit || undefined,
+      email: profile?.email || authData.user.email || email,
+      displayName: profile?.display_name || authData.user.email?.split('@')[0] || 'Usuario',
+      role: profile?.role || 'usuario',
+      buildingId: profile?.building_id || undefined,
+      unit: profile?.unit || undefined,
       token,
     };
 
@@ -53,7 +64,7 @@ export async function signInWithEmail(email: string, password: string): Promise<
 
 export async function signOut(): Promise<void> {
   try {
-    await clerkAuth.signOut();
+    await supabase.auth.signOut();
     logger.log('User signed out successfully');
   } catch (error) {
     logger.error('Sign out error:', error);
@@ -63,14 +74,14 @@ export async function signOut(): Promise<void> {
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
   try {
-    const clerkUser = await clerkAuth.getCurrentUser();
+    const { data: { session } } = await supabase.auth.getSession();
     
-    if (!clerkUser) {
+    if (!session?.user) {
       return null;
     }
 
-    const userId = clerkUser.id;
-    const token = await clerkAuth.getToken() || '';
+    const userId = session.user.id;
+    const token = session.access_token;
     const profile = await database.getUser(userId);
 
     if (!profile) {
@@ -100,7 +111,8 @@ export async function refreshUserData(userId: string): Promise<AuthUser | null> 
       return null;
     }
 
-    const token = await clerkAuth.getToken() || '';
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || '';
 
     return {
       id: userId,

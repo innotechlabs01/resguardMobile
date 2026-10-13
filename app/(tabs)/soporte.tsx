@@ -139,12 +139,12 @@ export default function SoporteScreen() {
         building_id: user.building_id,
         created_by: user.id,
         created_by_name: user.display_name,
-        created_by_unit: user.unit,
+        created_by_unit: user.unit || undefined,
         subject: createForm.subject,
         description: createForm.description,
         category: createForm.category,
         priority: createForm.priority,
-        unit: createForm.unit || user.unit,
+        unit: createForm.unit || user.unit || undefined,
         location_detail: createForm.location_detail || undefined,
       });
       if (result) {

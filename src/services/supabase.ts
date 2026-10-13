@@ -20,7 +20,7 @@ export const getUser = async (userId: string) => {
   const { data, error } = await supabase
     .from('users')
     .select('*')
-    .eq('clerk_user_id', userId)
+    .eq('id', userId)
     .single();
 
   if (error) throw error;
@@ -56,7 +56,7 @@ export const getParkingRequests = async (userId: string) => {
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
+  if (error) throw error
   return data;
 };
 

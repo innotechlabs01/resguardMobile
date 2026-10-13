@@ -15,21 +15,20 @@ export const tursoDb = openRemote({
 });
 
 export interface UserProfile {
-  id: number;
-  clerk_user_id: string;
+  id: string;
   email: string;
   display_name: string;
   role: string;
   building_id: string | null;
-  unit?: string;
+  unit: string | null;
   created_at: string;
 }
 
-export async function getUser(clerkUserId: string): Promise<UserProfile | null> {
+export async function getUser(userId: string): Promise<UserProfile | null> {
   try {
     const result = await tursoDb.execute(
-      'SELECT * FROM users WHERE clerk_user_id = ?',
-      [clerkUserId]
+      'SELECT * FROM users WHERE id = ?',
+      [userId]
     );
 
     if (!result.rows || result.rows.length === 0) {
@@ -168,7 +167,7 @@ export async function saveIntercomCall(call: {
   }
 }
 
-export async function upsertUser(clerkUser: {
+export async function upsertUser(userData: {
   id: string;
   email: string;
   fullName: string;
@@ -179,39 +178,39 @@ export async function upsertUser(clerkUser: {
   unit?: string;
 }): Promise<{ success: boolean; profile?: UserProfile; error?: string }> {
   try {
-    const displayName = clerkUser.fullName ||
-      `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() ||
-      clerkUser.email;
+    const displayName = userData.fullName ||
+      `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
+      userData.email;
 
-    const existingUser = await getUser(clerkUser.id);
+    const existingUser = await getUser(userData.id);
 
     if (existingUser) {
       await tursoDb.execute(
-        'UPDATE users SET email = ?, display_name = ?, building_id = ?, role = ?, unit = ? WHERE clerk_user_id = ?',
+        'UPDATE users SET email = ?, display_name = ?, building_id = ?, role = ?, unit = ? WHERE id = ?',
         [
-          clerkUser.email,
+          userData.email,
           displayName,
-          clerkUser.buildingId || existingUser.building_id,
-          clerkUser.role || existingUser.role,
-          clerkUser.unit ?? existingUser.unit ?? null,
-          clerkUser.id,
+          userData.buildingId || existingUser.building_id,
+          userData.role || existingUser.role,
+          userData.unit ?? existingUser.unit ?? null,
+          userData.id,
         ]
       );
     } else {
       await tursoDb.execute(
-        'INSERT INTO users (clerk_user_id, email, display_name, role, building_id, unit) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO users (id, email, display_name, role, building_id, unit) VALUES (?, ?, ?, ?, ?, ?)',
         [
-          clerkUser.id,
-          clerkUser.email,
+          userData.id,
+          userData.email,
           displayName,
-          clerkUser.role || 'usuario',
-          clerkUser.buildingId || null,
-          clerkUser.unit ?? null,
+          userData.role || 'usuario',
+          userData.buildingId || null,
+          userData.unit ?? null,
         ]
       );
     }
 
-    const updatedUser = await getUser(clerkUser.id);
+    const updatedUser = await getUser(userData.id);
     return { success: true, profile: updatedUser || undefined };
   } catch (error) {
     logger.error('Error upserting user to Turso:', error);
@@ -222,11 +221,11 @@ export async function upsertUser(clerkUser: {
   }
 }
 
-export async function updateUserRole(clerkUserId: string, role: string): Promise<boolean> {
+export async function updateUserRole(userId: string, role: string): Promise<boolean> {
   try {
     await tursoDb.execute(
-      'UPDATE users SET role = ? WHERE clerk_user_id = ?',
-      [role, clerkUserId]
+      'UPDATE users SET role = ? WHERE id = ?',
+      [role, userId]
     );
     return true;
   } catch (error) {
@@ -235,11 +234,11 @@ export async function updateUserRole(clerkUserId: string, role: string): Promise
   }
 }
 
-export async function updateUserBuilding(clerkUserId: string, buildingId: string): Promise<boolean> {
+export async function updateUserBuilding(userId: string, buildingId: string): Promise<boolean> {
   try {
     await tursoDb.execute(
-      'UPDATE users SET building_id = ? WHERE clerk_user_id = ?',
-      [buildingId, clerkUserId]
+      'UPDATE users SET building_id = ? WHERE id = ?',
+      [buildingId, userId]
     );
     return true;
   } catch (error) {

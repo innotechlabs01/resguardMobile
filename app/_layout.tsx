@@ -1,48 +1,11 @@
-import React, { useEffect } from 'react';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import React from 'react';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import * as SecureStore from 'expo-secure-store';
-import { ClerkProvider, useAuth, SignedIn, SignedOut } from '@clerk/clerk-expo';
 import { PaperProvider } from 'react-native-paper';
-import Constants from 'expo-constants';
 import { theme, Colors } from '../src/lib/theme';
-
-const CLERK_KEY = Constants.expoConfig?.extra?.CLERK_PUBLISHABLE_KEY || process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
-const tokenCache = {
-  async getToken(key: string) {
-    try {
-      return SecureStore.getItemAsync(key);
-    } catch (err) {
-      return null;
-    }
-  },
-  async saveToken(key: string, value: string) {
-    try {
-      return SecureStore.setItemAsync(key, value);
-    } catch (err) {
-      return;
-    }
-  },
-};
+import { AuthProvider } from '../src/contexts/AuthContext';
 
 function InitialLayout() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const segments = useSegments();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    const inAuthGroup = segments[0] === undefined || segments[0] === 'splash' || segments[0] === 'login' || segments[0] === 'lock';
-
-    if (!isSignedIn && !inAuthGroup) {
-      router.replace('/splash' as any);
-    } else if (isSignedIn && inAuthGroup && segments[0] !== 'lock') {
-      router.replace('/(tabs)' as any);
-    }
-  }, [isLoaded, isSignedIn, segments]);
-
   return (
     <Stack
       screenOptions={{
@@ -113,14 +76,11 @@ function InitialLayout() {
 
 export default function RootLayout() {
   return (
-    <ClerkProvider 
-      publishableKey={CLERK_KEY || 'pk_test_placeholder'} 
-      tokenCache={tokenCache}
-    >
+    <AuthProvider>
       <PaperProvider theme={theme}>
         <StatusBar style="light" />
         <InitialLayout />
       </PaperProvider>
-    </ClerkProvider>
+    </AuthProvider>
   );
 }

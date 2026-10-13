@@ -1,18 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { useSegments, useRouter } from 'expo-router';
-import { useAuth as useClerkAuth, useUser as useClerkUser } from '@clerk/clerk-expo';
-import { clerkAuth, ClerkUser } from '../services/clerkAuth';
-import { saveToken, clearToken, getToken, getUserId, isTokenExpired, isTokenNeedingRefresh, hasValidToken } from '../services/tokenStorage';
-import { syncClerkUserToSupabase, getUserProfile, UserProfile } from '../services/userSync';
-import { registerForPushNotifications } from '../services/pushNotifications';
+import { useRouter, useSegments } from 'expo-router';
+import { supabase } from '../services/supabase';
+import { useAuthStore } from '../../src/stores/authStore';
+import { UserProfile } from '../services/userSync';
 
 interface AuthContextType {
   user: UserProfile | null;
-  clerkUser: ClerkUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   needsRefresh: boolean;
-  login: (clerkUser: any) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
   checkAuth: () => Promise<void>;
@@ -27,141 +24,182 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter();
   const segments = useSegments();
-  
-  const { isSignedIn, isLoaded: clerkLoaded, signOut: clerkSignOut } = useClerkAuth();
-  const { user: clerkUserData, isLoaded: userLoaded } = useClerkUser();
+  const { user, isAuthenticated, isLoading, setLoading, login: storeLogin, logout: storeLogout } = useAuthStore();
 
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [clerkUser, setClerkUser] = useState<ClerkUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [needsRefresh, setNeedsRefresh] = useState(false);
 
-  const login = useCallback(async (clerkUserData: any) => {
+  const checkAuth = useCallback(async () => {
     try {
-      const token = await clerkUserData.getToken();
-      const userId = clerkUserData.id;
+      const { data: { session } } = await supabase.auth.getSession();
       
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
+      if (session?.user) {
+        // Get user profile from users table (by supabase user id)
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
 
-      await saveToken(token, userId, expiresAt);
+        if (profile) {
+          storeLogin({
+            id: session.user.id,
+            email: session.user.email || '',
+            display_name: profile.display_name || session.user.email?.split('@')[0] || 'Usuario',
+            role: profile.role || 'usuario',
+            building_id: profile.building_id || null,
+            unit: profile.unit || null,
+            created_at: profile.created_at,
+          }, session.access_token);
+        } else {
+          // Fallback if no profile yet
+          storeLogin({
+            id: session.user.id,
+            email: session.user.email || '',
+            display_name: session.user.email?.split('@')[0] || 'Usuario',
+            role: 'usuario',
+            building_id: null,
+            unit: null,
+            created_at: new Date().toISOString(),
+          }, session.access_token);
+        }
+      } else {
+        storeLogout();
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+      storeLogout();
+    } finally {
+      setLoading(false);
+    }
+  }, [storeLogin, storeLogout, setLoading]);
 
-      const userData: ClerkUser = {
-        id: clerkUserData.id,
-        email: clerkUserData.primaryEmailAddress?.emailAddress || '',
-        fullName: clerkUserData.fullName || '',
-        firstName: clerkUserData.firstName || '',
-        lastName: clerkUserData.lastName || '',
-        buildingId: clerkUserData.publicMetadata?.buildingId as string,
-        role: clerkUserData.publicMetadata?.role as string,
-        unit: clerkUserData.publicMetadata?.unit as string,
-      };
-
-      setClerkUser(userData);
-
-      await syncClerkUserToSupabase({
-        id: userData.id,
-        email: userData.email,
-        fullName: userData.fullName,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        buildingId: userData.buildingId,
-        role: userData.role,
-        unit: userData.unit,
+  const login = useCallback(async (email: string, password: string) => {
+    setLoading(true);
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
       });
 
-      const profile = await getUserProfile(userId);
-      setUser(profile);
+      if (authError) {
+        throw new Error(authError.message || 'Error al iniciar sesión');
+      }
 
-      // Register push token for intercom notifications
-      registerForPushNotifications(userId).catch(console.error);
+      if (authData.user) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authData.user.id)
+          .single();
+
+        storeLogin({
+          id: authData.user.id,
+          email: authData.user.email || email,
+          display_name: profile?.display_name || authData.user.email?.split('@')[0] || 'Usuario',
+          role: profile?.role || 'usuario',
+          building_id: profile?.building_id || null,
+          unit: profile?.unit || null,
+          created_at: profile?.created_at || new Date().toISOString(),
+        }, authData.session?.access_token || '');
+      }
     } catch (error) {
       console.error('Login error:', error);
       throw error;
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [storeLogin, setLoading]);
 
   const logout = useCallback(async () => {
     try {
-      await clearToken();
-      await clerkSignOut();
-      setUser(null);
-      setClerkUser(null);
-      setNeedsRefresh(false);
+      await supabase.auth.signOut();
+      storeLogout();
       router.replace('/splash' as any);
     } catch (error) {
       console.error('Logout error:', error);
     }
-  }, [clerkSignOut, router]);
+  }, [storeLogout, router]);
 
   const refreshToken = useCallback(async (): Promise<boolean> => {
     try {
-      const refreshed = await clerkAuth.refreshToken();
-      if (refreshed) {
-        setNeedsRefresh(false);
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error || !data.session) {
+        return false;
       }
-      return refreshed;
+      
+      // Update stored token
+      if (data.session?.access_token) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', data.session.user.id)
+          .single();
+        
+        storeLogin({
+          id: data.session.user.id,
+          email: data.session.user.email || '',
+          display_name: profile?.display_name || data.session.user.email?.split('@')[0] || 'Usuario',
+          role: profile?.role || 'usuario',
+          building_id: profile?.building_id || null,
+          unit: profile?.unit || null,
+          created_at: profile?.created_at || new Date().toISOString(),
+        }, data.session.access_token);
+      }
+      
+      setNeedsRefresh(false);
+      return true;
     } catch (error) {
       console.error('Token refresh error:', error);
       return false;
     }
-  }, []);
+  }, [storeLogin]);
 
-  const checkAuth = useCallback(async () => {
-    if (!clerkLoaded || !userLoaded) {
-      return;
-    }
-
-    try {
-      const validToken = await hasValidToken();
-      
-      if (isSignedIn && validToken) {
-        const needsRefreshVal = await isTokenNeedingRefresh();
-        setNeedsRefresh(needsRefreshVal);
-
-        const storedUserId = await getUserId();
-        if (storedUserId) {
-          const profile = await getUserProfile(storedUserId);
-          setUser(profile);
-        }
-      } else {
-        setUser(null);
-        setNeedsRefresh(false);
-      }
-    } catch (error) {
-      console.error('Auth check error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isSignedIn, clerkLoaded, userLoaded]);
-
+  // Listen to auth state changes
   useEffect(() => {
     checkAuth();
-  }, [checkAuth]);
 
-  useEffect(() => {
-    if (isSignedIn && clerkUserData) {
-      login(clerkUserData).catch(console.error);
-    }
-  }, [isSignedIn, clerkUserData]);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
 
+        storeLogin({
+          id: session.user.id,
+          email: session.user.email || '',
+          display_name: profile?.display_name || session.user.email?.split('@')[0] || 'Usuario',
+          role: profile?.role || 'usuario',
+          building_id: profile?.building_id || null,
+          unit: profile?.unit || null,
+          created_at: profile?.created_at || new Date().toISOString(),
+        }, session.access_token);
+      } else if (event === 'SIGNED_OUT') {
+        storeLogout();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [checkAuth, storeLogin, storeLogout]);
+
+  // Navigation guard
   useEffect(() => {
-    const inAuthGroup = segments[0] === undefined;
-    
-    if (!isLoading && clerkLoaded && userLoaded) {
-      if (!isSignedIn && inAuthGroup) {
+    if (!isLoading) {
+      const inAuthGroup = segments[0] === undefined || segments[0] === 'splash' || segments[0] === 'login' || segments[0] === 'lock';
+
+      if (!isAuthenticated && !inAuthGroup) {
         router.replace('/splash' as any);
-      } else if (isSignedIn && inAuthGroup) {
+      } else if (isAuthenticated && inAuthGroup && segments[0] !== 'lock') {
         router.replace('/(tabs)' as any);
       }
     }
-  }, [segments, isSignedIn, isLoading, clerkLoaded, userLoaded]);
+  }, [isLoading, isAuthenticated, segments, router]);
 
   const value: AuthContextType = {
     user,
-    clerkUser,
     isLoading,
-    isAuthenticated: !!(isSignedIn && !!user),
+    isAuthenticated,
     needsRefresh,
     login,
     logout,

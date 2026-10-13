@@ -4,21 +4,20 @@ import * as supabase from './supabase';
 const isDevelopment = process.env.EXPO_PUBLIC_APP_SCOPE === 'DEVELOPMENT';
 
 export interface UserProfile {
-  id: string | number;
-  clerk_user_id: string;
+  id: string;
   email: string;
   display_name: string;
   role: string;
   building_id: string | null;
-  unit?: string;
+  unit: string | null;
   created_at: string;
 }
 
-export async function getUser(clerkUserId: string): Promise<UserProfile | null> {
+export async function getUser(userId: string): Promise<UserProfile | null> {
   if (isDevelopment) {
-    return turso.getUser(clerkUserId);
+    return turso.getUser(userId);
   }
-  return supabase.getUser(clerkUserId);
+  return supabase.getUser(userId);
 }
 
 export async function getUserPayments(userId: string) {
@@ -90,7 +89,7 @@ export async function saveIntercomCall(call: {
   return supabase.saveIntercomCall(call);
 }
 
-export async function syncUser(clerkUser: {
+export async function syncUser(userData: {
   id: string;
   email: string;
   fullName: string;
@@ -101,26 +100,33 @@ export async function syncUser(clerkUser: {
   unit?: string;
 }): Promise<{ success: boolean; profile?: UserProfile; error?: string }> {
   if (isDevelopment) {
-    return turso.upsertUser(clerkUser);
+    return turso.upsertUser(userData);
   }
-  const { syncClerkUserToSupabase } = await import('./userSync');
-  return syncClerkUserToSupabase(clerkUser);
+  const { syncUserToSupabase } = await import('./userSync');
+  return syncUserToSupabase({
+    id: userData.id,
+    email: userData.email,
+    displayName: userData.fullName,
+    buildingId: userData.buildingId,
+    role: userData.role,
+    unit: userData.unit,
+  });
 }
 
-export async function updateUserRole(clerkUserId: string, role: string): Promise<boolean> {
+export async function updateUserRole(userId: string, role: string): Promise<boolean> {
   if (isDevelopment) {
-    return turso.updateUserRole(clerkUserId, role);
+    return turso.updateUserRole(userId, role);
   }
   const { updateUserRole: supabaseUpdateRole } = await import('./userSync');
-  return supabaseUpdateRole(clerkUserId, role);
+  return supabaseUpdateRole(userId, role);
 }
 
-export async function updateUserBuilding(clerkUserId: string, buildingId: string): Promise<boolean> {
+export async function updateUserBuilding(userId: string, buildingId: string): Promise<boolean> {
   if (isDevelopment) {
-    return turso.updateUserBuilding(clerkUserId, buildingId);
+    return turso.updateUserBuilding(userId, buildingId);
   }
   const { updateUserBuilding: supabaseUpdateBuilding } = await import('./userSync');
-  return supabaseUpdateBuilding(clerkUserId, buildingId);
+  return supabaseUpdateBuilding(userId, buildingId);
 }
 
 export function isDevMode(): boolean {

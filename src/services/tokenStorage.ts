@@ -1,8 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 
-const TOKEN_KEY = 'clerk_session_token';
-const TOKEN_EXPIRY_KEY = 'clerk_session_expiry';
-const USER_ID_KEY = 'clerk_user_id';
+const TOKEN_KEY = 'resguard_session_token';
+const TOKEN_EXPIRY_KEY = 'resguard_session_expiry';
+const USER_ID_KEY = 'resguard_user_id';
 
 const TOKEN_VALIDITY_DAYS = 7;
 const TOKEN_REFRESH_THRESHOLD_DAYS = 7;
@@ -49,7 +49,7 @@ export async function clearToken(): Promise<void> {
   try {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     await SecureStore.deleteItemAsync(TOKEN_EXPIRY_KEY);
-    await SecureStore.getItemAsync(USER_ID_KEY);
+    await SecureStore.deleteItemAsync(USER_ID_KEY);
   } catch (error) {
     console.error('Error clearing token:', error);
   }

@@ -121,7 +121,7 @@ export default function ConvivenciaScreen() {
         building_id: user.building_id,
         reporter_id: user.id,
         reporter_name: user.display_name,
-        reporter_unit: user.unit,
+        reporter_unit: user.unit || undefined,
         infraction_type: createForm.infraction_type,
         description: createForm.description,
         location: createForm.location || undefined,

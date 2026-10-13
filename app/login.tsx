@@ -38,25 +38,26 @@ export default function LoginScreen() {
       }
 
       if (authData.user) {
-        // Get user profile from profiles table
+        // Get user profile from users table
         const { data: profile, error: profileError } = await supabase
-          .from('profiles')
+          .from('users')
           .select('*')
-          .eq('clerk_user_id', authData.user.id)
+          .eq('id', authData.user.id)
           .single();
 
         if (profileError && profileError.code !== 'PGRST116') {
           console.log('Profile error:', profileError);
         }
 
-        // Create user object
+        // Create user object matching store schema
         const user = {
           id: authData.user.id,
           email: authData.user.email || email,
-          displayName: profile?.display_name || authData.user.email?.split('@')[0] || 'Usuario',
+          display_name: profile?.display_name || authData.user.email?.split('@')[0] || 'Usuario',
           role: profile?.role || 'usuario',
-          buildingId: profile?.building_id || undefined,
-          unit: profile?.unit || undefined,
+          building_id: profile?.building_id || null,
+          unit: profile?.unit || null,
+          created_at: profile?.created_at || new Date().toISOString(),
         };
 
         // Save to Zustand store
@@ -64,7 +65,7 @@ export default function LoginScreen() {
 
         Alert.alert(
           'Bienvenido',
-          `Hola ${user.displayName}, has iniciado sesion correctamente.`,
+          `Hola ${user.display_name}, has iniciado sesion correctamente.`,
           [{ text: 'OK', onPress: () => router.replace('/(tabs)' as any) }]
         );
       }
