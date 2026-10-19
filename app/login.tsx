@@ -45,8 +45,25 @@ export default function LoginScreen() {
           .eq('id', authData.user.id)
           .single();
 
-        if (profileError && profileError.code !== 'PGRST116') {
-          console.log('Profile error:', profileError);
+        // N7 fix: reject login if no profile exists (phantom user).
+        // The handle_new_user trigger should create a profile on signup,
+        // but if it's missing (legacy account, trigger failure), we sign
+        // the user out instead of letting them in as a phantom 'usuario'.
+        if (profileError && profileError.code === 'PGRST116') {
+          console.warn('No profile found for authenticated user — signing out');
+          await supabase.auth.signOut();
+          setError(
+            'Tu cuenta no tiene un perfil asociado. Contacta al administrador de tu edificio.'
+          );
+          setIsLoading(false);
+          return;
+        }
+
+        if (profileError) {
+          console.error('Profile fetch error:', profileError);
+          setError('Error al cargar tu perfil. Intenta de nuevo.');
+          setIsLoading(false);
+          return;
         }
 
         // Create user object matching store schema
