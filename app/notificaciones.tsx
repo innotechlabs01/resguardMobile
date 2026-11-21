@@ -1,10 +1,12 @@
-import { useState } from 'react';
-import { View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+'use client'
+
+import { useState, useEffect, useCallback } from 'react';
+import { View, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Card, Text, Button, Surface, Chip, Divider } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../src/lib/theme';
-import { mockCommunications } from '../src/services/mockData';
-import { Communication } from '../src/types';
+import { getCommunications, markCommunicationAsRead, Communication } from '../src/services/communications';
+import { useAuth } from '../src/contexts/AuthContext';
 
 const typeConfig: Record<Communication['type'], { label: string; icon: string; color: string; bgColor: string }> = {
   announcement: { label: 'Anuncio', icon: 'megaphone-outline', color: Colors.text, bgColor: Colors.muted },
@@ -22,31 +24,63 @@ const priorityConfig: Record<Communication['priority'], { label: string; color: 
 };
 
 export default function NotificacionesScreen() {
-  const [communications, setCommunications] = useState<Communication[]>(mockCommunications);
+  const { user } = useAuth();
+  const [communications, setCommunications] = useState<Communication[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [selectedComm, setSelectedComm] = useState<Communication | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const MY_USER_ID = 'user-1';
+  const MY_USER_ID = user?.id || 'user-1';
 
-  const markAsRead = (id: string) => {
+  const loadCommunications = useCallback(async () => {
+    if (!user?.building_id) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getCommunications(user.building_id);
+      setCommunications(data);
+    } catch (err) {
+      console.error('Error loading communications:', err);
+      setError('No se pudieron cargar las notificaciones');
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.building_id]);
+
+  useEffect(() => {
+    loadCommunications();
+  }, [loadCommunications]);
+
+  const markAsRead = async (id: string) => {
+    const success = await markCommunicationAsRead(id, MY_USER_ID);
+    if (success) {
+      setCommunications((prev) =>
+        prev.map((c) =>
+          c.id === id && !c.read_by.includes(MY_USER_ID)
+            ? { ...c, read_by: [...c.read_by, MY_USER_ID] }
+            : c
+        )
+      );
+    }
+  };
+
+  const markAllRead = async () => {
+    const unread = communications.filter((c) => !c.read_by.includes(MY_USER_ID));
+    for (const comm of unread) {
+      await markCommunicationAsRead(comm.id, MY_USER_ID);
+    }
     setCommunications((prev) =>
       prev.map((c) =>
-        c.id === id && !c.readBy.includes(MY_USER_ID)
-          ? { ...c, readBy: [...c.readBy, MY_USER_ID] }
-          : c
+        !c.read_by.includes(MY_USER_ID) ? { ...c, read_by: [...c.read_by, MY_USER_ID] } : c
       )
     );
   };
 
-  const markAllRead = () => {
-    setCommunications((prev) =>
-      prev.map((c) =>
-        !c.readBy.includes(MY_USER_ID) ? { ...c, readBy: [...c.readBy, MY_USER_ID] } : c
-      )
-    );
-  };
-
-  const isRead = (comm: Communication) => comm.readBy.includes(MY_USER_ID);
+  const isRead = (comm: Communication) => comm.read_by.includes(MY_USER_ID);
 
   const filtered = communications.filter((c) => {
     if (filter === 'unread') return !isRead(c);
@@ -55,13 +89,13 @@ export default function NotificacionesScreen() {
 
   const unreadCount = communications.filter((c) => !isRead(c)).length;
 
-  const formatRelativeTime = (date: Date) => {
+  const formatRelativeTime = (date: Date | string) => {
     const diff = Date.now() - new Date(date).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 60) return `Hace ${mins} min`;
-    const hrs = Math.floor(mins / 60);
+    const hrs = Math.floor(diff / 3600000);
     if (hrs < 24) return `Hace ${hrs}h`;
-    return `Hace ${Math.floor(hrs / 24)} dias`;
+    return `Hace ${Math.floor(hrs / 24)} días`;
   };
 
   const openComm = (comm: Communication) => {
@@ -86,7 +120,7 @@ export default function NotificacionesScreen() {
         </View>
         {unreadCount > 0 && (
           <Button mode="text" compact onPress={markAllRead}>
-            Marcar todo leido
+            Marcar todo leído
           </Button>
         )}
       </View>
@@ -112,7 +146,18 @@ export default function NotificacionesScreen() {
         </Chip>
       </View>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Text variant="bodyMedium" style={styles.errorText}>{error}</Text>
+          <Button mode="text" compact onPress={loadCommunications}>
+            Reintentar
+          </Button>
+        </View>
+      ) : filtered.length === 0 ? (
         <Card style={styles.emptyCard}>
           <Card.Content style={styles.emptyContent}>
             <Icon name="bell-off-outline" size={64} color={Colors.textSecondary} />
@@ -147,11 +192,11 @@ export default function NotificacionesScreen() {
                         {!read && <View style={styles.unreadDot} />}
                       </View>
                       <View style={styles.notificationMeta}>
-                        <Chip compact style={{ backgroundColor: type.bgColor, height: 22 }}>
+                        <Chip compact style={{ backgroundColor: type.bgColor }}>
                           <Text style={{ fontSize: 10, color: type.color }}>{type.label}</Text>
                         </Chip>
                         {(comm.priority === 'urgent' || comm.priority === 'high') && (
-                          <Chip compact style={{ backgroundColor: priority.color + '20', height: 22 }}>
+                          <Chip compact style={{ backgroundColor: priority.color + '20' }}>
                             <Text style={{ fontSize: 10, color: priority.color }}>{priority.label}</Text>
                           </Chip>
                         )}
@@ -163,10 +208,10 @@ export default function NotificacionesScreen() {
                   </Text>
                   <View style={styles.notificationFooter}>
                     <Text variant="bodySmall" style={styles.notificationAuthor}>
-                      {comm.authorName}
+                      {comm.author_name}
                     </Text>
                     <Text variant="bodySmall" style={styles.notificationTime}>
-                      {formatRelativeTime(comm.sentAt)}
+                      {formatRelativeTime(comm.sent_at || comm.created_at)}
                     </Text>
                   </View>
                 </Card.Content>
@@ -175,43 +220,43 @@ export default function NotificacionesScreen() {
           );
         })
       )}
-
-      {selectedComm && (
-        <Card style={styles.detailCard}>
-          <Card.Content>
-            <View style={styles.detailHeader}>
-              <View style={[styles.typeIcon, { backgroundColor: typeConfig[selectedComm.type].bgColor }]}>
-                <Icon name={typeConfig[selectedComm.type].icon} size={24} color={typeConfig[selectedComm.type].color} />
-              </View>
-              <View style={styles.detailTitle}>
-                <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>{selectedComm.title}</Text>
-                <View style={styles.detailChips}>
-                  <Chip compact style={{ backgroundColor: typeConfig[selectedComm.type].bgColor }}>
-                    {typeConfig[selectedComm.type].label}
-                  </Chip>
-                  <Chip compact style={{ backgroundColor: priorityConfig[selectedComm.priority].color + '20' }}>
-                    {priorityConfig[selectedComm.priority].label}
-                  </Chip>
+          
+          {selectedComm && (
+            <Card style={styles.detailCard}>
+              <Card.Content>
+                <View style={styles.detailHeader}>
+                  <View style={[styles.typeIcon, { backgroundColor: typeConfig[selectedComm.type].bgColor }]}>
+                    <Icon name={typeConfig[selectedComm.type].icon} size={24} color={typeConfig[selectedComm.type].color} />
+                  </View>
+                  <View style={styles.detailTitle}>
+                    <Text variant="titleMedium" style={{ fontWeight: 'bold' }}>{selectedComm.title}</Text>
+                    <View style={styles.detailChips}>
+                      <Chip compact style={{ backgroundColor: typeConfig[selectedComm.type].bgColor }}>
+                        {typeConfig[selectedComm.type].label}
+                      </Chip>
+                      <Chip compact style={{ backgroundColor: priorityConfig[selectedComm.priority].color + '20' }}>
+                        {priorityConfig[selectedComm.priority].label}
+                      </Chip>
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </View>
-            <Text variant="bodyMedium" style={styles.detailMessage}>
-              {selectedComm.message}
-            </Text>
-            <View style={styles.detailFooter}>
-              <Text variant="bodySmall" style={styles.detailAuthor}>
-                Enviado por {selectedComm.authorName}
-              </Text>
-              <Text variant="bodySmall" style={styles.detailTime}>
-                {formatRelativeTime(selectedComm.sentAt)}
-              </Text>
-            </View>
-            <Button mode="contained" onPress={() => setSelectedComm(null)} style={styles.detailButton}>
-              Entendido
-            </Button>
-          </Card.Content>
-        </Card>
-      )}
+                <Text variant="bodyMedium" style={styles.detailMessage}>
+                  {selectedComm.message}
+                </Text>
+                <View style={styles.detailFooter}>
+                  <Text variant="bodySmall" style={styles.detailAuthor}>
+                    Enviado por {selectedComm.author_name}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.detailTime}>
+                    {formatRelativeTime(selectedComm.sent_at || selectedComm.created_at)}
+                  </Text>
+                </View>
+                <Button mode="contained" onPress={() => setSelectedComm(null)} style={styles.detailButton}>
+                  Entendido
+                </Button>
+              </Card.Content>
+            </Card>
+          )}
 
       <View style={{ height: 20 }} />
     </ScrollView>
@@ -256,6 +301,23 @@ const styles = StyleSheet.create({
   emptyText: {
     color: Colors.textSecondary,
     marginTop: 12,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 12,
+    marginHorizontal: 16,
+  },
+  errorText: {
+    color: Colors.error,
+    fontWeight: '500',
   },
   notificationCard: {
     marginHorizontal: 16,

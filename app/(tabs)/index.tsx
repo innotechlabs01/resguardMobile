@@ -1,10 +1,13 @@
-import { useMemo } from 'react';
-import { ScrollView, View, StyleSheet, TouchableOpacity } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { RefreshControl, ScrollView, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Card, Text, Button, Avatar, Chip, useTheme } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { palette, type AppPalette } from '../../src/lib/theme';
-import { mockUser, mockPayments, mockCommunications, mockReservations } from '../../src/services/mockData';
+import { useAuth } from '../../src/contexts/AuthContext';
+import { getUserPayments } from '../../src/services/payments';
+import { getCommunications, type Communication } from '../../src/services/communications';
+import { supabase } from '../../src/services/supabase';
 
 interface QuickAction {
   id: string;
@@ -36,26 +39,67 @@ export default function HomeScreen() {
   const theme = useTheme();
   const c: AppPalette = theme.dark ? palette.dark : palette.light;
   const styles = useMemo(() => makeStyles(c), [c]);
+  const { user } = useAuth();
 
-  const user = mockUser;
-  const pendingPayments = mockPayments.filter((p) => p.status === 'pending');
-  const totalPending = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
-  const unreadNotifications = mockCommunications.filter(
-    (comm) => !comm.readBy.includes(user.id),
-  ).length;
-  const activeReservations = mockReservations.filter((r) => r.status === 'confirmed').length;
-  const initials = user.displayName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [communications, setCommunications] = useState<Communication[]>([]);
+  const [activeReservations, setActiveReservations] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadDashboard = useCallback(async () => {
+    if (!user?.id || !user.building_id) return;
+    try {
+      const [paymentsData, commsData, resResult] = await Promise.all([
+        user.unit ? getUserPayments(user.building_id, user.unit) : Promise.resolve([]),
+        getCommunications(user.building_id),
+        supabase
+          .from('area_reservations')
+          .select('id, status')
+          .eq('building_id', user.building_id)
+          .eq('user_id', user.id)
+          .in('status', ['pending', 'confirmed']),
+      ]);
+
+      const pending = paymentsData.filter((p) => p.status === 'pending');
+      setPendingTotal(pending.reduce((sum, p) => sum + p.amount, 0));
+      setCommunications(commsData);
+      setActiveReservations(resResult.data?.length ?? 0);
+    } catch (error) {
+      console.error('Error loading home dashboard:', error);
+    }
+  }, [user?.id, user?.building_id, user?.unit]);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDashboard();
+    setRefreshing(false);
+  }, [loadDashboard]);
+
+  const displayName = user?.display_name || user?.email?.split('@')[0] || 'Residente';
+  const totalPending = pendingTotal;
+  const unreadNotifications = user?.id
+    ? communications.filter((comm) => !comm.read_by.includes(user.id)).length
+    : 0;
+  const initials =
+    displayName
+      .split(' ')
+      .filter(Boolean)
+      .map((n) => n[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'R';
+  const residentTypeLabel = user?.is_tenant ? 'Inquilino' : 'Propietario';
 
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.brand} />}
     >
       {/* ---- Hero / welcome ---- */}
       <View style={styles.hero}>
@@ -64,10 +108,12 @@ export default function HomeScreen() {
             <Avatar.Text size={48} label={initials} style={styles.heroAvatar} labelStyle={styles.heroAvatarLabel} />
             <View style={styles.heroTextWrap}>
               <Text variant="titleMedium" style={styles.heroTitle} numberOfLines={1}>
-                Hola, {user.displayName.split(' ')[0]}
+                Hola, {displayName.split(' ')[0]}
               </Text>
               <Text variant="bodySmall" style={styles.heroSubtitle} numberOfLines={1}>
-                Apartamento {user.unit} · {user.buildingName}
+                {user?.unit ? `Apto ${user.unit}` : residentTypeLabel}
+                {user?.building_name ? ` · ${user.building_name}` : ''}
+                {user?.unit ? ` · ${residentTypeLabel}` : ''}
               </Text>
             </View>
           </View>
@@ -115,14 +161,6 @@ export default function HomeScreen() {
             {totalPending > 0 ? 'Pagar cuota' : 'Ver pagos'}
           </Button>
         </View>
-      </View>
-
-      {/* ---- Demo data disclosure ---- */}
-      <View style={styles.demoNote}>
-        <Icon name="information-outline" size={14} color={c.textMuted} />
-        <Text variant="bodySmall" style={styles.demoNoteText}>
-          Datos de demostración
-        </Text>
       </View>
 
       {/* ---- Summary ---- */}
@@ -193,7 +231,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {mockCommunications.length === 0 ? (
+      {communications.length === 0 ? (
         <View style={styles.emptyCard}>
           <Icon name="bell-sleep-outline" size={28} color={c.textMuted} />
           <Text variant="bodyMedium" style={styles.emptyText}>
@@ -201,7 +239,7 @@ export default function HomeScreen() {
           </Text>
         </View>
       ) : (
-        mockCommunications.slice(0, 2).map((comm) => (
+        communications.slice(0, 2).map((comm) => (
           <Card key={comm.id} style={styles.commCard} mode="outlined">
             <Card.Content>
               <View style={styles.commHeader}>
@@ -227,10 +265,10 @@ export default function HomeScreen() {
               </Text>
               <View style={styles.commFooter}>
                 <Text variant="bodySmall" style={styles.commMeta}>
-                  {comm.authorName}
+                  {comm.author_name}
                 </Text>
                 <Text variant="bodySmall" style={styles.commMeta}>
-                  {new Date(comm.sentAt).toLocaleDateString('es-CO', {
+                  {new Date(comm.sent_at).toLocaleDateString('es-CO', {
                     day: 'numeric',
                     month: 'short',
                   })}

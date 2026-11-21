@@ -1,37 +1,119 @@
-import { useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Card, Text, Button, Surface, Chip, Portal, Modal, TextInput } from 'react-native-paper';
+import { useCallback, useEffect, useState } from 'react';
+import { RefreshControl, View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { ActivityIndicator, Card, Text, Button, Surface, Chip, Portal, Modal, TextInput } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../../src/lib/theme';
-import { mockReservations, mockCommonAreas } from '../../src/services/mockData';
-import { Reservation, CommonArea } from '../../src/types';
+import { useAuth } from '../../src/contexts/AuthContext';
+import { supabase } from '../../src/services/supabase';
+
+interface DbCommonArea {
+  id: string;
+  building_id: string;
+  name: string;
+  description: string | null;
+  max_capacity: number | null;
+  max_duration_hours: number | null;
+  advance_notice_hours: number | null;
+  is_active: boolean;
+}
+
+interface DbAreaReservation {
+  id: string;
+  area_id: string;
+  building_id: string;
+  user_id: string;
+  user_name: string;
+  start_time: string;
+  end_time: string;
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+  notes: string | null;
+  created_at: string;
+}
+
+const areaIconForName = (name: string): string => {
+  const lower = name.toLowerCase();
+  if (lower.includes('bbq') || lower.includes('asador') || lower.includes('parrilla')) return 'grill';
+  if (lower.includes('gimnasio') || lower.includes('gym')) return 'dumbbell';
+  if (lower.includes('piscina') || lower.includes('pool')) return 'pool';
+  if (lower.includes('salon') || lower.includes('salón') || lower.includes('social')) return 'party-popper';
+  if (lower.includes('terraza')) return 'balcony';
+  if (lower.includes('cancha')) return 'tennis';
+  return 'home-city-outline';
+};
 
 export default function ReservasScreen() {
-  const [reservations, setReservations] = useState<Reservation[]>(mockReservations);
+  const { user } = useAuth();
+  const [commonAreas, setCommonAreas] = useState<DbCommonArea[]>([]);
+  const [reservations, setReservations] = useState<DbAreaReservation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedArea, setSelectedArea] = useState<CommonArea | null>(null);
+  const [selectedArea, setSelectedArea] = useState<DbCommonArea | null>(null);
   const [formData, setFormData] = useState({
     date: '',
     startTime: '',
     endTime: '',
-    guests: '',
     notes: '',
   });
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+  const loadData = useCallback(async () => {
+    if (!user?.building_id || !user?.id) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const [areasRes, reservationsRes] = await Promise.all([
+        supabase
+          .from('common_areas')
+          .select('*')
+          .eq('building_id', user.building_id)
+          .eq('is_active', true)
+          .order('name', { ascending: true }),
+        supabase
+          .from('area_reservations')
+          .select('*')
+          .eq('building_id', user.building_id)
+          .eq('user_id', user.id)
+          .order('start_time', { ascending: false }),
+      ]);
 
-  const formatDate = (date: Date) => {
+      if (areasRes.error) throw areasRes.error;
+      if (reservationsRes.error) throw reservationsRes.error;
+
+      setCommonAreas(areasRes.data || []);
+      setReservations(reservationsRes.data || []);
+    } catch (error) {
+      console.error('Error loading reservations:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.building_id, user?.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, [loadData]);
+
+  const formatDate = (iso: string) => {
     return new Intl.DateTimeFormat('es-CO', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
-    }).format(new Date(date));
+    }).format(new Date(iso));
+  };
+
+  const formatTime = (iso: string) => {
+    return new Intl.DateTimeFormat('es-CO', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(iso));
   };
 
   const getStatusConfig = (status: string) => {
@@ -40,6 +122,8 @@ export default function ReservasScreen() {
         return { label: 'Confirmada', color: Colors.success, bgColor: Colors.successContainer };
       case 'pending':
         return { label: 'Pendiente', color: Colors.warning, bgColor: Colors.warningContainer };
+      case 'completed':
+        return { label: 'Completada', color: Colors.info, bgColor: Colors.infoContainer };
       case 'cancelled':
         return { label: 'Cancelada', color: Colors.error, bgColor: Colors.errorContainer };
       default:
@@ -48,117 +132,201 @@ export default function ReservasScreen() {
   };
 
   const getAreaName = (areaId: string) => {
-    const area = mockCommonAreas.find(a => a.id === areaId || a.name.toLowerCase().replace(' ', '_') === areaId);
-    return area?.name || areaId;
+    const area = commonAreas.find((a) => a.id === areaId);
+    return area?.name || 'Zona Común';
   };
 
   const getAreaIcon = (areaId: string) => {
-    const area = mockCommonAreas.find(a => a.id === areaId || a.name.toLowerCase().replace(' ', '_') === areaId);
-    return area?.icon || 'home';
+    const area = commonAreas.find((a) => a.id === areaId);
+    return area ? areaIconForName(area.name) : 'home-city-outline';
   };
 
   const handleCancel = (reservationId: string) => {
+    if (!user?.id) return;
     Alert.alert(
       'Cancelar Reserva',
-      'Estas seguro de cancelar esta reserva?',
+      '¿Estás seguro de cancelar esta reserva?',
       [
         { text: 'No', style: 'cancel' },
-        { 
-          text: 'Si, Cancelar', 
+        {
+          text: 'Sí, Cancelar',
           style: 'destructive',
-          onPress: () => {
-            setReservations(prev => prev.map(r => 
-              r.id === reservationId ? { ...r, status: 'cancelled' } : r
-            ));
-            Alert.alert('Exito', 'Reserva cancelada correctamente.');
-          }
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('area_reservations')
+                .update({ status: 'cancelled' })
+                .eq('id', reservationId)
+                .eq('user_id', user.id);
+
+              if (error) throw error;
+
+              setReservations((prev) =>
+                prev.map((r) => (r.id === reservationId ? { ...r, status: 'cancelled' } : r))
+              );
+              Alert.alert('Éxito', 'Reserva cancelada correctamente.');
+            } catch (error) {
+              console.error('Error cancelling reservation:', error);
+              Alert.alert('Error', 'No se pudo cancelar la reserva.');
+            }
+          },
         },
       ]
     );
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (!user?.building_id || !user?.id) {
+      Alert.alert('Error', 'Debes iniciar sesión para hacer una reserva.');
+      return;
+    }
+    const targetArea = selectedArea || commonAreas[0] || null;
+    if (!targetArea) {
+      Alert.alert('Error', 'No hay zonas comunes disponibles en este edificio.');
+      return;
+    }
     if (!formData.date || !formData.startTime || !formData.endTime) {
-      Alert.alert('Error', 'Por favor completa los campos requeridos.');
+      Alert.alert('Error', 'Por favor completa la fecha, hora de inicio y hora de fin.');
       return;
     }
 
-    const newReservation: Reservation = {
-      id: Date.now().toString(),
-      area: selectedArea?.name.toLowerCase().replace(' ', '_') || '',
-      date: new Date(formData.date),
-      startTime: formData.startTime,
-      endTime: formData.endTime,
-      status: 'pending',
-      guests: formData.guests ? parseInt(formData.guests) : undefined,
-      notes: formData.notes || undefined,
-    };
+    const startDate = new Date(`${formData.date.trim()}T${formData.startTime.trim()}:00`);
+    const endDate = new Date(`${formData.date.trim()}T${formData.endTime.trim()}:00`);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      Alert.alert('Error', 'Formato inválido. Usa YYYY-MM-DD y HH:MM (ej. 14:00).');
+      return;
+    }
+    if (endDate <= startDate) {
+      Alert.alert('Error', 'La hora de fin debe ser posterior a la hora de inicio.');
+      return;
+    }
 
-    setReservations([newReservation, ...reservations]);
-    setModalVisible(false);
-    setFormData({ date: '', startTime: '', endTime: '', guests: '', notes: '' });
-    setSelectedArea(null);
-    Alert.alert('Exito', 'Tu solicitud de reserva ha sido enviada. Recibiras una confirmacion.');
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase
+        .from('area_reservations')
+        .insert({
+          area_id: targetArea.id,
+          building_id: user.building_id,
+          user_id: user.id,
+          user_name: user.display_name || user.email,
+          start_time: startDate.toISOString(),
+          end_time: endDate.toISOString(),
+          status: 'pending',
+          notes: formData.notes.trim() || null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '23P01' || error.message?.includes('Time slot already reserved')) {
+          Alert.alert('Horario ocupado', 'Ese horario ya está reservado para esta zona.');
+          return;
+        }
+        throw error;
+      }
+
+      if (data) {
+        setReservations((prev) => [data, ...prev]);
+      }
+      setModalVisible(false);
+      setFormData({ date: '', startTime: '', endTime: '', notes: '' });
+      setSelectedArea(null);
+      Alert.alert('Éxito', 'Tu solicitud de reserva ha sido enviada.');
+    } catch (error) {
+      console.error('Error creating reservation:', error);
+      Alert.alert('Error', 'No se pudo crear la reserva. Intenta de nuevo.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const openReservationModal = (area: CommonArea) => {
+  const openReservationModal = (area: DbCommonArea) => {
     setSelectedArea(area);
     setModalVisible(true);
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <Text variant="titleMedium" style={styles.sectionTitle}>Areas Disponibles</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.areasScroll}>
-        <View style={styles.areasContainer}>
-          {mockCommonAreas.map((area) => (
-            <Card 
-              key={area.id} 
-              style={styles.areaCard}
-              onPress={() => openReservationModal(area)}
-            >
-              <Card.Content style={styles.areaContent}>
-                <View style={styles.areaIcon}>
-                  <Icon name={area.icon} size={28} color={Colors.text} />
-                </View>
-                <Text variant="titleSmall" style={styles.areaName}>{area.name}</Text>
-                <Text variant="bodySmall" style={styles.areaInfo}>
-                  Max {area.maxGuests} personas
-                </Text>
-                {area.deposit > 0 && (
-                  <Text variant="bodySmall" style={styles.areaDeposit}>
-                    Deposito: {formatCurrency(area.deposit)}
-                  </Text>
-                )}
-              </Card.Content>
-            </Card>
-          ))}
+    <ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+    >
+      <Text variant="titleMedium" style={styles.sectionTitle}>Áreas Disponibles</Text>
+      {loading ? (
+        <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+          <ActivityIndicator size="small" color={Colors.primary} />
         </View>
-      </ScrollView>
+      ) : commonAreas.length === 0 ? (
+        <Card style={styles.reservationsCard}>
+          <Card.Content style={styles.emptyState}>
+            <Icon name="home-city-outline" size={40} color={Colors.textSecondary} />
+            <Text variant="bodyMedium" style={styles.emptyText}>
+              No hay zonas comunes configuradas
+            </Text>
+          </Card.Content>
+        </Card>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.areasScroll}>
+          <View style={styles.areasContainer}>
+            {commonAreas.map((area) => (
+              <Card
+                key={area.id}
+                style={styles.areaCard}
+                onPress={() => openReservationModal(area)}
+              >
+                <Card.Content style={styles.areaContent}>
+                  <View style={styles.areaIcon}>
+                    <Icon name={areaIconForName(area.name)} size={28} color={Colors.text} />
+                  </View>
+                  <Text variant="titleSmall" style={styles.areaName}>{area.name}</Text>
+                  <Text variant="bodySmall" style={styles.areaInfo}>
+                    Máx {area.max_capacity ?? 10} personas
+                  </Text>
+                  {area.max_duration_hours ? (
+                    <Text variant="bodySmall" style={styles.areaDeposit}>
+                      Máx {area.max_duration_hours}h
+                    </Text>
+                  ) : null}
+                </Card.Content>
+              </Card>
+            ))}
+          </View>
+        </ScrollView>
+      )}
 
       <Text variant="titleMedium" style={styles.sectionTitle}>Mis Reservas</Text>
       <Card style={styles.reservationsCard}>
         <Card.Content>
-          {reservations.length === 0 ? (
+          {loading ? (
+            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={Colors.primary} />
+            </View>
+          ) : reservations.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name="calendar-blank-outline" size={64} color={Colors.textSecondary} />
               <Text variant="bodyMedium" style={styles.emptyText}>
                 No tienes reservas programadas
               </Text>
-              <Button 
-                mode="contained" 
-                onPress={() => setModalVisible(true)}
-                style={{ backgroundColor: Colors.primary, marginTop: 16 }}
-              >
-                Hacer una Reserva
-              </Button>
+              {commonAreas.length > 0 && (
+                <Button
+                  mode="contained"
+                  onPress={() => {
+                    setSelectedArea(commonAreas[0]);
+                    setModalVisible(true);
+                  }}
+                  style={{ backgroundColor: Colors.primary, marginTop: 16 }}
+                >
+                  Hacer una Reserva
+                </Button>
+              )}
             </View>
           ) : (
             reservations.map((reservation, index) => {
               const statusConfig = getStatusConfig(reservation.status);
-              const areaName = getAreaName(reservation.area);
-              const areaIcon = getAreaIcon(reservation.area);
-              
+              const areaName = getAreaName(reservation.area_id);
+              const areaIcon = getAreaIcon(reservation.area_id);
+
               return (
                 <View key={reservation.id}>
                   <Surface style={styles.reservationItem} elevation={0}>
@@ -168,15 +336,14 @@ export default function ReservasScreen() {
                     <View style={styles.reservationInfo}>
                       <Text variant="bodyMedium" style={{ fontWeight: '600' }}>{areaName}</Text>
                       <Text variant="bodySmall" style={styles.reservationDate}>
-                        {formatDate(reservation.date)}
+                        {formatDate(reservation.start_time)}
                       </Text>
                       <Text variant="bodySmall" style={styles.reservationTime}>
-                        {reservation.startTime} - {reservation.endTime}
-                        {reservation.guests && ` | ${reservation.guests} invitados`}
+                        {formatTime(reservation.start_time)} - {formatTime(reservation.end_time)}
                       </Text>
                     </View>
-                    <Chip 
-                      mode="flat" 
+                    <Chip
+                      mode="flat"
                       compact
                       style={{ backgroundColor: statusConfig.bgColor }}
                       textStyle={{ color: statusConfig.color, fontSize: 10 }}
@@ -184,11 +351,11 @@ export default function ReservasScreen() {
                       {statusConfig.label}
                     </Chip>
                   </Surface>
-                  {reservation.status === 'pending' && (
+                  {(reservation.status === 'pending' || reservation.status === 'confirmed') && (
                     <View style={styles.reservationActions}>
-                      <Button 
-                        mode="text" 
-                        compact 
+                      <Button
+                        mode="text"
+                        compact
                         textColor={Colors.error}
                         onPress={() => handleCancel(reservation.id)}
                       >
@@ -276,16 +443,6 @@ export default function ReservasScreen() {
             
             <TextInput
               mode="outlined"
-              label="Numero de Invitados"
-              placeholder="Cantidad aproximada"
-              value={formData.guests}
-              onChangeText={(text) => setFormData({ ...formData, guests: text })}
-              keyboardType="numeric"
-              style={styles.input}
-            />
-            
-            <TextInput
-              mode="outlined"
               label="Notas (opcional)"
               placeholder="Descripcion del evento"
               value={formData.notes}
@@ -295,19 +452,11 @@ export default function ReservasScreen() {
               style={styles.input}
             />
 
-            {selectedArea?.deposit && selectedArea.deposit > 0 && (
-              <Surface style={styles.depositInfo} elevation={0}>
-                <Icon name="information-outline" size={20} color={Colors.info} />
-                <Text variant="bodySmall" style={styles.depositText}>
-                  Deposito requerido: {formatCurrency(selectedArea.deposit)}
-                </Text>
-              </Surface>
-            )}
-            
             <View style={styles.modalActions}>
               <Button 
                 mode="outlined" 
                 onPress={() => setModalVisible(false)}
+                disabled={submitting}
                 style={{ flex: 1 }}
               >
                 Cancelar
@@ -315,6 +464,8 @@ export default function ReservasScreen() {
               <Button 
                 mode="contained" 
                 onPress={handleSubmit}
+                loading={submitting}
+                disabled={submitting}
                 style={{ flex: 1, backgroundColor: Colors.primary }}
               >
                 Enviar
