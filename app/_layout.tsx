@@ -1,8 +1,9 @@
 import React from 'react';
+import { useColorScheme } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PaperProvider } from 'react-native-paper';
-import { theme, Colors } from '../src/lib/theme';
+import { lightTheme, darkTheme, Colors } from '../src/lib/theme';
 import { AuthProvider } from '../src/contexts/AuthContext';
 
 function InitialLayout() {
@@ -75,10 +76,13 @@ function InitialLayout() {
 }
 
 export default function RootLayout() {
+  const colorScheme = useColorScheme();
+  const currentTheme = colorScheme === 'dark' ? darkTheme : lightTheme;
+
   return (
     <AuthProvider>
-      <PaperProvider theme={theme}>
-        <StatusBar style="light" />
+      <PaperProvider theme={currentTheme}>
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
         <InitialLayout />
       </PaperProvider>
     </AuthProvider>

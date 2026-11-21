@@ -1,18 +1,20 @@
 import { Tabs } from 'expo-router';
-import { Colors } from '../../src/lib/theme';
-import { View, StyleSheet } from 'react-native';
+import { useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 export default function TabLayout() {
+  const theme = useTheme();
+  const c = theme.colors;
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textSecondary,
+        tabBarActiveTintColor: c.secondary,
+        tabBarInactiveTintColor: c.onSurfaceVariant,
         tabBarStyle: {
-          backgroundColor: Colors.surface,
-          borderTopColor: Colors.border,
-          height: 60,
+          backgroundColor: c.surface,
+          borderTopColor: c.outlineVariant,
+          height: 62,
           paddingBottom: 8,
           paddingTop: 8,
         },
@@ -21,11 +23,15 @@ export default function TabLayout() {
           fontWeight: '500',
         },
         headerStyle: {
-          backgroundColor: Colors.primary,
+          backgroundColor: c.surface,
         },
-        headerTintColor: '#FFFFFF',
+        headerTintColor: c.onSurface,
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontWeight: '600',
+        },
+        headerShadowVisible: false,
+        sceneStyle: {
+          backgroundColor: c.background,
         },
       }}
     >
@@ -35,17 +41,17 @@ export default function TabLayout() {
           title: 'Inicio',
           headerTitle: 'ResGuard',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'home' : 'home-outline'} size={size} color={focused ? Colors.primary : color} />
+            <Icon name={focused ? 'home' : 'home-outline'} size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="citofono"
         options={{
-          title: 'Citofono',
-          headerTitle: 'Citofono',
+          title: 'Citófono',
+          headerTitle: 'Citófono',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'phone-in-talk' : 'phone-outline'} size={size} color={focused ? Colors.primary : color} />
+            <Icon name={focused ? 'phone-in-talk' : 'phone-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -55,7 +61,7 @@ export default function TabLayout() {
           title: 'Pagos',
           headerTitle: 'Pagos',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'credit-card' : 'credit-card-outline'} size={size} color={focused ? Colors.primary : color} />
+            <Icon name={focused ? 'credit-card' : 'credit-card-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -65,7 +71,7 @@ export default function TabLayout() {
           title: 'Reservas',
           headerTitle: 'Reservas',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'calendar-check' : 'calendar-outline'} size={size} color={focused ? Colors.primary : color} />
+            <Icon name={focused ? 'calendar-check' : 'calendar-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -75,7 +81,7 @@ export default function TabLayout() {
           title: 'Asambleas',
           headerTitle: 'Asambleas',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'vote' : 'vote-outline'} size={size} color={focused ? Colors.primary : color} />
+            <Icon name={focused ? 'vote' : 'vote-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -85,7 +91,7 @@ export default function TabLayout() {
           title: 'Mantenimiento',
           headerTitle: 'Mantenimiento',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'wrench' : 'wrench-outline'} size={size} color={focused ? Colors.primary : color} />
+            <Icon name={focused ? 'wrench' : 'wrench-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -95,7 +101,7 @@ export default function TabLayout() {
           title: 'Convivencia',
           headerTitle: 'Convivencia',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'shield-alert' : 'shield-alert-outline'} size={size} color={focused ? Colors.primary : color} />
+            <Icon name={focused ? 'shield-alert' : 'shield-alert-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -105,27 +111,17 @@ export default function TabLayout() {
           title: 'Mensajes',
           headerTitle: 'Mensajes',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'message-text' : 'message-text-outline'} size={size} color={focused ? Colors.primary : color} />
+            <Icon name={focused ? 'message-text' : 'message-text-outline'} size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="servicios"
+        name="soporte"
         options={{
-          title: 'Servicios',
-          headerTitle: 'Servicios',
+          title: 'Soporte',
+          headerTitle: 'Soporte',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'water' : 'water-outline'} size={size} color={focused ? Colors.primary : color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="proveedores"
-        options={{
-          title: 'Proveedores',
-          headerTitle: 'Proveedores',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'account-group' : 'account-group-outline'} size={size} color={focused ? Colors.primary : color} />
+            <Icon name={focused ? 'lifebuoy' : 'lifebuoy'} size={size} color={color} />
           ),
         }}
       />
@@ -135,7 +131,7 @@ export default function TabLayout() {
           title: 'Encuestas',
           headerTitle: 'Encuestas',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'clipboard-check' : 'clipboard-check-outline'} size={size} color={focused ? Colors.primary : color} />
+            <Icon name={focused ? 'clipboard-check' : 'clipboard-check-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -145,7 +141,7 @@ export default function TabLayout() {
           title: 'Bienvenida',
           headerTitle: 'Bienvenida',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon name={focused ? 'hand-wave' : 'hand-wave-outline'} size={size} color={focused ? Colors.primary : color} />
+            <Icon name={focused ? 'hand-wave' : 'hand-wave-outline'} size={size} color={color} />
           ),
         }}
       />

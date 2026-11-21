@@ -28,40 +28,111 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const [needsRefresh, setNeedsRefresh] = useState(false);
 
+  const hydrateUserProfile = useCallback(async (authUser: { id: string; email?: string | null }): Promise<UserProfile> => {
+    const email = (authUser.email || '').trim().toLowerCase();
+    const { data: profile } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
+
+    let buildingId: string | null = profile?.building_id || null;
+    let buildingName: string | null = null;
+    let isTenant = false;
+    let resolvedUnit: string | null =
+      typeof profile?.unit === 'string' && profile.unit.trim() ? profile.unit.trim() : null;
+
+    let resident: { unit?: string | null; is_tenant?: boolean | null; building_id?: string | null } | null = null;
+
+    const { data: residentByUserId } = await supabase
+      .from('residents')
+      .select('unit, is_tenant, building_id')
+      .eq('user_id', authUser.id)
+      .maybeSingle();
+
+    if (residentByUserId) {
+      resident = residentByUserId;
+    } else if (email) {
+      let residentQuery = supabase
+        .from('residents')
+        .select('unit, is_tenant, building_id')
+        .eq('email', email);
+      if (buildingId) {
+        residentQuery = residentQuery.eq('building_id', buildingId);
+      }
+      const { data: residentByEmail } = await residentQuery.maybeSingle();
+      resident = residentByEmail;
+    }
+
+    if (resident) {
+      if (!resolvedUnit && typeof resident.unit === 'string' && resident.unit.trim()) {
+        resolvedUnit = resident.unit.trim();
+      }
+      if (!buildingId && resident.building_id) {
+        buildingId = resident.building_id;
+      }
+      if (resident.is_tenant) {
+        isTenant = true;
+      }
+    }
+
+    if (email && (!isTenant || !resolvedUnit)) {
+      let tenantQuery = supabase
+        .from('tenants')
+        .select('id, unit, building_id')
+        .eq('email', email)
+        .eq('status', 'active');
+      if (buildingId) {
+        tenantQuery = tenantQuery.eq('building_id', buildingId);
+      }
+      const { data: tenant } = await tenantQuery.maybeSingle();
+      if (tenant) {
+        isTenant = true;
+        if (!resolvedUnit && typeof tenant.unit === 'string' && tenant.unit.trim()) {
+          resolvedUnit = tenant.unit.trim();
+        }
+        if (!buildingId && tenant.building_id) {
+          buildingId = tenant.building_id;
+        }
+      }
+    }
+
+    if (buildingId) {
+      const { data: building } = await supabase
+        .from('buildings')
+        .select('name')
+        .eq('id', buildingId)
+        .maybeSingle();
+      buildingName = building?.name || null;
+    }
+
+    const resolvedName =
+      profile?.name ||
+      profile?.display_name ||
+      authUser.email?.split('@')[0] ||
+      'Usuario';
+
+    return {
+      id: authUser.id,
+      email: authUser.email || '',
+      name: resolvedName,
+      display_name: resolvedName,
+      role: profile?.role || 'usuario',
+      building_id: buildingId,
+      building_name: buildingName,
+      unit: resolvedUnit,
+      is_tenant: isTenant,
+      created_at: profile?.created_at || new Date().toISOString(),
+    };
+  }, []);
+
   const checkAuth = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
-        // Get user profile from users table (by supabase user id)
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profile) {
-          storeLogin({
-            id: session.user.id,
-            email: session.user.email || '',
-            display_name: profile.display_name || session.user.email?.split('@')[0] || 'Usuario',
-            role: profile.role || 'usuario',
-            building_id: profile.building_id || null,
-            unit: profile.unit || null,
-            created_at: profile.created_at,
-          }, session.access_token);
-        } else {
-          // Fallback if no profile yet
-          storeLogin({
-            id: session.user.id,
-            email: session.user.email || '',
-            display_name: session.user.email?.split('@')[0] || 'Usuario',
-            role: 'usuario',
-            building_id: null,
-            unit: null,
-            created_at: new Date().toISOString(),
-          }, session.access_token);
-        }
+        const hydrated = await hydrateUserProfile(session.user);
+        storeLogin(hydrated, session.access_token);
       } else {
         storeLogout();
       }
@@ -71,7 +142,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setLoading(false);
     }
-  }, [storeLogin, storeLogout, setLoading]);
+  }, [hydrateUserProfile, storeLogin, storeLogout, setLoading]);
 
   const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
@@ -86,21 +157,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       if (authData.user) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', authData.user.id)
-          .single();
-
-        storeLogin({
-          id: authData.user.id,
-          email: authData.user.email || email,
-          display_name: profile?.display_name || authData.user.email?.split('@')[0] || 'Usuario',
-          role: profile?.role || 'usuario',
-          building_id: profile?.building_id || null,
-          unit: profile?.unit || null,
-          created_at: profile?.created_at || new Date().toISOString(),
-        }, authData.session?.access_token || '');
+        const hydrated = await hydrateUserProfile(authData.user);
+        storeLogin(hydrated, authData.session?.access_token || '');
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -108,7 +166,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setLoading(false);
     }
-  }, [storeLogin, setLoading]);
+  }, [hydrateUserProfile, storeLogin, setLoading]);
 
   const logout = useCallback(async () => {
     try {
@@ -129,21 +187,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       // Update stored token
       if (data.session?.access_token) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', data.session.user.id)
-          .single();
-        
-        storeLogin({
-          id: data.session.user.id,
-          email: data.session.user.email || '',
-          display_name: profile?.display_name || data.session.user.email?.split('@')[0] || 'Usuario',
-          role: profile?.role || 'usuario',
-          building_id: profile?.building_id || null,
-          unit: profile?.unit || null,
-          created_at: profile?.created_at || new Date().toISOString(),
-        }, data.session.access_token);
+        const hydrated = await hydrateUserProfile(data.session.user);
+        storeLogin(hydrated, data.session.access_token);
       }
       
       setNeedsRefresh(false);
@@ -152,7 +197,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.error('Token refresh error:', error);
       return false;
     }
-  }, [storeLogin]);
+  }, [hydrateUserProfile, storeLogin]);
 
   // Listen to auth state changes
   useEffect(() => {
@@ -160,28 +205,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-
-        storeLogin({
-          id: session.user.id,
-          email: session.user.email || '',
-          display_name: profile?.display_name || session.user.email?.split('@')[0] || 'Usuario',
-          role: profile?.role || 'usuario',
-          building_id: profile?.building_id || null,
-          unit: profile?.unit || null,
-          created_at: profile?.created_at || new Date().toISOString(),
-        }, session.access_token);
+        const hydrated = await hydrateUserProfile(session.user);
+        storeLogin(hydrated, session.access_token);
       } else if (event === 'SIGNED_OUT') {
         storeLogout();
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [checkAuth, storeLogin, storeLogout]);
+  }, [checkAuth, hydrateUserProfile, storeLogin, storeLogout]);
 
   // Navigation guard
   useEffect(() => {

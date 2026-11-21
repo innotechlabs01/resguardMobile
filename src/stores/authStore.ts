@@ -6,7 +6,9 @@ export interface User {
   display_name: string;
   role: string;
   building_id: string | null;
+  building_name?: string | null;
   unit: string | null;
+  is_tenant?: boolean;
   created_at: string;
 }
 

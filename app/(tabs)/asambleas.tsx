@@ -1,20 +1,111 @@
-import { useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Card, Text, Button, Surface, Chip, RadioButton, Portal, Modal, Divider } from 'react-native-paper';
+import { useCallback, useEffect, useState } from 'react';
+import { RefreshControl, View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { ActivityIndicator, Card, Text, Button, Surface, Chip, RadioButton, Portal, Modal, Divider } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../../src/lib/theme';
-import { mockAssemblies } from '../../src/services/mockData';
+import { useAuth } from '../../src/contexts/AuthContext';
+import { getAssemblies, submitVote as submitVoteDb } from '../../src/services/database';
+import { supabase } from '../../src/services/supabase';
 import { encryptVote } from '../../src/services/voting';
-import { Assembly, AgendaItem } from '../../src/types';
+import { Assembly, AgendaItem, VoteOption } from '../../src/types';
+
+function normalizeStatus(status: string): Assembly['status'] {
+  if (status === 'active' || status === 'in_progress') return 'active';
+  if (status === 'closed' || status === 'completed') return 'closed';
+  return 'upcoming';
+}
+
+function normalizeOptions(raw: unknown): VoteOption[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((opt: any, idx: number) => {
+    if (typeof opt === 'string') {
+      return { id: opt, label: opt, voteCount: 0 };
+    }
+    return {
+      id: String(opt?.id ?? idx),
+      label: String(opt?.label ?? opt?.title ?? opt?.name ?? `Opción ${idx + 1}`),
+      voteCount: typeof opt?.voteCount === 'number' ? opt.voteCount : typeof opt?.vote_count === 'number' ? opt.vote_count : 0,
+      percentage: typeof opt?.percentage === 'number' ? opt.percentage : undefined,
+    };
+  });
+}
 
 export default function AsambleasScreen() {
-  const [assemblies] = useState<Assembly[]>(mockAssemblies);
+  const { user } = useAuth();
+  const [assemblies, setAssemblies] = useState<Assembly[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedAssembly, setSelectedAssembly] = useState<Assembly | null>(null);
   const [voteModalVisible, setVoteModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<AgendaItem | null>(null);
   const [selectedOption, setSelectedOption] = useState<string>('');
   const [isVoting, setIsVoting] = useState(false);
   const [hasVoted, setHasVoted] = useState<Record<string, boolean>>({});
+
+  const loadAssemblies = useCallback(async () => {
+    if (!user?.building_id || !user?.id) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const [rows, votesRes] = await Promise.all([
+        getAssemblies(user.building_id),
+        supabase
+          .from('votes')
+          .select('agenda_item_id')
+          .eq('user_id', user.id),
+      ]);
+
+      const votedMap: Record<string, boolean> = {};
+      (votesRes.data || []).forEach((v: any) => {
+        if (v.agenda_item_id) votedMap[v.agenda_item_id] = true;
+      });
+      setHasVoted(votedMap);
+
+      const mapped: Assembly[] = (rows || []).map((row: any) => {
+        const items: AgendaItem[] = Array.isArray(row.agenda_items)
+          ? row.agenda_items.map((item: any) => ({
+              id: item.id,
+              assemblyId: item.assembly_id || row.id,
+              title: item.title,
+              description: item.description || '',
+              voteType: item.vote_type === 'multiple_choice' ? 'multiple_choice' : 'yes_no',
+              options: normalizeOptions(item.options),
+              hasVoted: Boolean(votedMap[item.id]),
+            }))
+          : [];
+
+        return {
+          id: row.id,
+          buildingId: row.building_id,
+          title: row.title,
+          description: row.description || '',
+          startDate: new Date(row.start_date || row.date || row.created_at),
+          endDate: new Date(row.end_date || row.start_date || row.date || row.created_at),
+          status: normalizeStatus(row.status),
+          createdBy: row.created_by || '',
+          createdAt: new Date(row.created_at),
+          agendaItems: items,
+        };
+      });
+
+      setAssemblies(mapped);
+    } catch (error) {
+      console.error('Error loading assemblies:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.building_id, user?.id]);
+
+  useEffect(() => {
+    loadAssemblies();
+  }, [loadAssemblies]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadAssemblies();
+    setRefreshing(false);
+  }, [loadAssemblies]);
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('es-CO', {
@@ -38,7 +129,7 @@ export default function AsambleasScreen() {
   };
 
   const openVoting = (item: AgendaItem) => {
-    if (item.hasVoted) {
+    if (item.hasVoted || hasVoted[item.id]) {
       Alert.alert('Ya has votado', 'Tu voto ya ha sido registrado.');
       return;
     }
@@ -48,7 +139,7 @@ export default function AsambleasScreen() {
   };
 
   const submitVote = async () => {
-    if (!selectedOption || !selectedItem) {
+    if (!selectedOption || !selectedItem || !user?.id) {
       Alert.alert('Error', 'Por favor selecciona una opcion.');
       return;
     }
@@ -58,18 +149,32 @@ export default function AsambleasScreen() {
     try {
       const voteData = `${selectedItem.id}:${selectedOption}:${Date.now()}`;
       const { encrypted, hash } = await encryptVote(voteData);
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
+      await submitVoteDb(selectedItem.id, user.id, encrypted, hash);
+
       setHasVoted(prev => ({ ...prev, [selectedItem.id]: true }));
-      
+      setAssemblies(prev =>
+        prev.map(a => ({
+          ...a,
+          agendaItems: a.agendaItems.map(item =>
+            item.id === selectedItem.id ? { ...item, hasVoted: true } : item
+          ),
+        }))
+      );
+
       Alert.alert(
         'Voto Registrado',
         'Tu voto ha sido cifrado y registrado de forma segura. No puedes modificar tu voto despues de enviado.',
         [{ text: 'Aceptar', onPress: () => setVoteModalVisible(false) }]
       );
-    } catch (error) {
-      Alert.alert('Error', 'Hubo un problema al registrar tu voto. Intenta de nuevo.');
+    } catch (error: any) {
+      if (error?.code === '23505') {
+        Alert.alert('Ya has votado', 'Tu voto ya fue registrado para este tema.');
+        setHasVoted(prev => ({ ...prev, [selectedItem.id]: true }));
+        setVoteModalVisible(false);
+      } else {
+        Alert.alert('Error', 'Hubo un problema al registrar tu voto. Intenta de nuevo.');
+      }
     } finally {
       setIsVoting(false);
     }
@@ -92,7 +197,11 @@ export default function AsambleasScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+    >
       <Surface style={styles.securityCard} elevation={1}>
         <View style={styles.securityContent}>
           <Icon name="shield-lock-outline" size={32} color={Colors.success} />
@@ -106,6 +215,20 @@ export default function AsambleasScreen() {
       </Surface>
 
       <Text variant="titleMedium" style={styles.sectionTitle}>Asambleas</Text>
+      {loading ? (
+        <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+          <ActivityIndicator size="small" color={Colors.primary} />
+        </View>
+      ) : assemblies.length === 0 ? (
+        <Card style={styles.assemblyCard}>
+          <Card.Content style={{ alignItems: 'center', paddingVertical: 28 }}>
+            <Icon name="vote-outline" size={44} color={Colors.textSecondary} />
+            <Text variant="bodyMedium" style={{ color: Colors.textSecondary, marginTop: 10 }}>
+              No hay asambleas registradas en tu edificio
+            </Text>
+          </Card.Content>
+        </Card>
+      ) : null}
       {assemblies.map((assembly) => {
         const statusConfig = getStatusConfig(assembly.status);
         const activeItems = assembly.agendaItems.filter(item => !item.hasVoted).length;

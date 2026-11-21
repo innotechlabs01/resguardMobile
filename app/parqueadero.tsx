@@ -3,16 +3,16 @@ import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { Card, Text, Button, Surface, Chip, Divider, TextInput, Portal, Modal, ActivityIndicator } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../src/lib/theme';
-import { mockParkingRequests } from '../src/services/mockData';
-import { ParkingRequest } from '../src/types';
+import { createParkingRequest, getParkingRequests, ParkingRequest } from '../src/services/parking-requests';
 import { getParkingAssignments, ParkingAssignment } from '../src/services/parking-assignments';
 import { useAuth } from '../src/contexts/AuthContext';
 
 export default function ParqueaderoScreen() {
   const { user } = useAuth();
-  const [requests, setRequests] = useState<ParkingRequest[]>(mockParkingRequests);
+  const [requests, setRequests] = useState<ParkingRequest[]>([]);
   const [assignments, setAssignments] = useState<ParkingAssignment[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(true);
+  const [loadingRequests, setLoadingRequests] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [formData, setFormData] = useState({
     visitorName: '',
@@ -37,9 +37,17 @@ export default function ParqueaderoScreen() {
     setLoadingAssignments(false);
   }, [user?.building_id]);
 
+  const fetchRequests = useCallback(async () => {
+    if (!user?.building_id) return;
+    const data = await getParkingRequests(user.building_id);
+    setRequests(data);
+    setLoadingRequests(false);
+  }, [user?.building_id]);
+
   useEffect(() => {
     fetchAssignments();
-  }, [fetchAssignments]);
+    fetchRequests();
+  }, [fetchAssignments, fetchRequests]);
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -56,25 +64,41 @@ export default function ParqueaderoScreen() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (!user?.building_id) {
+      Alert.alert('Error', 'No se encontró un edificio asignado.');
+      return;
+    }
     if (!formData.visitorName || !formData.vehiclePlate || !formData.date || !formData.time) {
       Alert.alert('Error', 'Por favor completa todos los campos requeridos.');
       return;
     }
 
-    const newRequest: ParkingRequest = {
-      id: Date.now().toString(),
-      visitorName: formData.visitorName,
-      vehiclePlate: formData.vehiclePlate,
-      date: new Date(`${formData.date}T${formData.time}`),
-      duration: parseInt(formData.duration),
-      status: 'pending',
-    };
+    try {
+      const startDate = new Date(`${formData.date}T${formData.time}`);
+      const durationHours = parseInt(formData.duration, 10) || 2;
+      const endDate = new Date(startDate.getTime() + durationHours * 3600000);
+      const newRequest = await createParkingRequest({
+        building_id: user.building_id,
+        visitor_name: formData.visitorName,
+        vehicle_plate: formData.vehiclePlate,
+        start_time: startDate.toISOString(),
+        end_time: endDate.toISOString(),
+        duration: durationHours,
+      });
 
-    setRequests([newRequest, ...requests]);
-    setModalVisible(false);
-    setFormData({ visitorName: '', vehiclePlate: '', date: '', time: '', duration: '2' });
-    Alert.alert('Exito', 'Solicitud de parqueo enviada. Esperar aprobacion.');
+      if (newRequest) {
+        setRequests([newRequest, ...requests]);
+        setModalVisible(false);
+        setFormData({ visitorName: '', vehiclePlate: '', date: '', time: '', duration: '2' });
+        Alert.alert('Exito', 'Solicitud de parqueo enviada. Esperar aprobacion.');
+      } else {
+        Alert.alert('Error', 'No se pudo enviar la solicitud. Intenta de nuevo.');
+      }
+    } catch (err) {
+      console.error('Error creating parking request:', err);
+      Alert.alert('Error', 'Error de conexión. Intenta de nuevo.');
+    }
   };
 
   const pendingCount = requests.filter(r => r.status === 'pending').length;
@@ -210,13 +234,13 @@ export default function ParqueaderoScreen() {
                     </View>
                     <View style={styles.requestInfo}>
                       <Text variant="bodyMedium" style={{ fontWeight: '600' }}>
-                        {request.visitorName}
+                        {request.visitor_name}
                       </Text>
                       <Text variant="bodySmall" style={styles.requestPlate}>
-                        {request.vehiclePlate}
+                        {request.vehicle_plate}
                       </Text>
                       <Text variant="bodySmall" style={styles.requestDate}>
-                        {formatDate(request.date)} - {request.time} ({request.duration}h)
+                        {formatDate(new Date(request.start_time))} ({request.duration}h)
                       </Text>
                     </View>
                     <View style={styles.requestStatus}>
@@ -228,9 +252,9 @@ export default function ParqueaderoScreen() {
                       >
                         {statusConfig.label}
                       </Chip>
-                      {request.spotAssigned && (
+                      {request.spot_assigned && (
                         <Text variant="bodySmall" style={styles.spotText}>
-                          Spot: {request.spotAssigned}
+                          Spot: {request.spot_assigned}
                         </Text>
                       )}
                     </View>
