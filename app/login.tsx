@@ -97,6 +97,16 @@ export default function LoginScreen() {
           >
             {isLoading ? 'Ingresando...' : 'Iniciar Sesion'}
           </Button>
+
+          <Button
+            mode="text"
+            uppercase={false}
+            onPress={() => router.push('/forgot-password' as any)}
+            textColor={Colors.textSecondary}
+            style={styles.forgotLink}
+          >
+            ¿Olvidaste tu contraseña?
+          </Button>
         </View>
 
         <View style={styles.infoSection}>
@@ -181,6 +191,9 @@ const styles = StyleSheet.create({
   signInButton: {
     borderRadius: 12,
     marginTop: 8,
+  },
+  forgotLink: {
+    marginTop: 4,
   },
   buttonContent: {
     paddingVertical: 8,
